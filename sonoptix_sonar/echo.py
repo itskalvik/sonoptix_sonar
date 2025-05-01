@@ -42,8 +42,7 @@ class EchoNode(Node):
 
         # Declare Parameters
         params = {
-          'range': [50.0, float],
-          'update_freq': [25, int],
+          'range': [50, int],
           'ip': ['192.168.2.42', str],
           'enable_transponder': [True, bool],
           'topic': ['sonar/echo/data', str],
@@ -77,17 +76,24 @@ class EchoNode(Node):
         self.publisher = self.create_publisher(Image, 
                                                self.topic, 
                                                10)
-
-        self.timer = self.create_timer(1/self.update_freq, self.sonar_data_callback)
         self.get_logger().info(f'Sonoptix Echo Initialized')
 
-    def sonar_data_callback(self):
-        _, frame = self.cap.read()
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        frame = self.br.cv2_to_imgmsg(frame, encoding='mono8')
-        frame.header.frame_id = self.frame_id
-        self.publisher.publish(frame)
+        while rclpy.ok():
+            if not self.enable_transponder:
+                rclpy.spin_once(self, timeout_sec=1.0)
+                continue
+            _, frame = self.cap.read()
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            frame[0, 0] = self.range
+            frame = self.br.cv2_to_imgmsg(frame, encoding='mono8')
+            frame.header.stamp = self.get_clock().now().to_msg()
+            frame.header.frame_id = self.frame_id
+
+            self.publisher.publish(frame)
     
+            # Allow for params callback to be processed
+            rclpy.spin_once(self, timeout_sec=0.01)
+            
     def set_param_callback(self, params):
         result = SetParametersResult(successful=True)
         for param in params:
@@ -105,7 +111,6 @@ class EchoNode(Node):
 def main():
     rclpy.init()
     node = EchoNode()
-    rclpy.spin(node)
 
 if __name__ == '__main__':
     main()

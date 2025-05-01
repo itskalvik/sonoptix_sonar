@@ -42,8 +42,7 @@ class EchoViewer(Node):
         params = {
           'data_topic': ['sonar/echo/data', str],
           'image_topic': ['sonar/echo/image', str],
-          'contrast': [20.0, float],
-          'fov' : [120, int], # Range <= 30 -> 120; >30 -> 90
+          'contrast': [30.0, float],
         }
 
         for param, [value, dtype] in params.items():
@@ -66,8 +65,10 @@ class EchoViewer(Node):
 
     def data_callback(self, msg):
         scan_image = self.br.imgmsg_to_cv2(msg)
+        max_range = scan_image[0, 0]
+        fov = 120 if max_range <= 30 else 90        
         scan_image = cv2.convertScaleAbs(scan_image, alpha=self.contrast, beta=0)
-        total_pix = int(((256 / 256 * (256/self.fov) * 360)-256)/2)
+        total_pix = int(((256 / 256 * (256/fov) * 360)-256)/2)
         scan_image = cv2.copyMakeBorder(scan_image, 
                                         0, 0, total_pix, total_pix, 
                                         cv2.BORDER_CONSTANT)
@@ -77,12 +78,17 @@ class EchoViewer(Node):
                                    maxRadius=750, 
                                    flags=cv2.WARP_INVERSE_MAP|cv2.WARP_FILL_OUTLIERS)
         scan_image = cv2.rotate(scan_image, cv2.ROTATE_90_CLOCKWISE)
-        if self.fov == 90:
+        if fov == 90:
             scan_image = scan_image[0:750, 200:1300]
-        elif self.fov == 120:
+        elif fov == 120:
             scan_image = scan_image[0:750,75:1425]
-        scan_image = cv2.applyColorMap(scan_image, cv2.COLORMAP_JET)
-
+        scan_image = cv2.applyColorMap(scan_image, cv2.COLORMAP_VIRIDIS)
+        scan_image = cv2.putText(scan_image, 
+                                 f'Range: {max_range} m',
+                                 (1, 25), 
+                                 cv2.FONT_HERSHEY_SIMPLEX, 
+                                 1, (255, 255, 255), 2, 
+                                 cv2.LINE_AA)
         self.publisher.publish(self.br.cv2_to_imgmsg(scan_image))
 
     def set_param_callback(self, params):
