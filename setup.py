@@ -21,7 +21,7 @@ setup(
     entry_points={
         'console_scripts': [
             'echo = sonoptix_sonar.echo:main',
-            'echo_viewer = sonoptix_sonar.echo_viewer:main'
+            'echo_imager = sonoptix_sonar.echo_imager:main'
         ],
     },
 )

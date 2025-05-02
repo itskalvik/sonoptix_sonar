@@ -34,8 +34,8 @@ from cv_bridge import CvBridge
 from sensor_msgs.msg import Image
 
 
-class EchoViewer(Node):
-    def __init__(self, node_name='echo_viewer'):
+class EchoImager(Node):
+    def __init__(self, node_name='echo_imager'):
         super().__init__(node_name)
 
         # Declare Parameters
@@ -102,7 +102,7 @@ class EchoViewer(Node):
 
 def main():
     rclpy.init()
-    node = EchoViewer()
+    node = EchoImager()
     rclpy.spin(node)
 
 if __name__ == '__main__':
