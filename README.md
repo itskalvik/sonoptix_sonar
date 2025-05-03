@@ -73,6 +73,8 @@ ros2 run sonoptix_sonar echo
 | `data_topic`   | str    | `sonar/echo/data`    | Input topic for raw sonar data         |
 | `image_topic`  | str    | `sonar/echo/image`   | Output topic for visualized image       |
 | `contrast`     | float  | `30.0`               | Contrast multiplier for visualization   |
+| `bag_path`     | str    |                      | Optional path to an input ros2 bag file with sonar data |
+| `video_file`   | str    |                      | Optional path to an output mp4 video file |
 
 **Run Example:**
 ```bash
