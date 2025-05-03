@@ -48,7 +48,7 @@ class EchoImager(Node):
             'data_topic': ['sonar/echo/data', str],
             'image_topic': ['sonar/echo/image', str],
             'contrast': [30.0, float],
-            'bag_path': ['', str],
+            'bag_file': ['', str],
             'video_file': ['', str],
         }
 
@@ -79,7 +79,7 @@ class EchoImager(Node):
             self.get_logger().info("Saving data to video file")
 
         # Determine if input is a topic or a bag
-        if len(self.bag_path) == 0:
+        if len(self.bag_file) == 0:
             self.from_bag = False
             self.subscrber = self.create_subscription(Image, self.data_topic,
                                                       self.data_callback, 10)
@@ -133,7 +133,7 @@ class EchoImager(Node):
             self.publisher.publish(self.br.cv2_to_imgmsg(scan_image))
 
     def play_bag(self):
-        storage_options = StorageOptions(uri=self.bag_path,
+        storage_options = StorageOptions(uri=self.bag_file,
                                          storage_id='sqlite3')
         converter_options = ConverterOptions(input_serialization_format='cdr',
                                              output_serialization_format='cdr')
