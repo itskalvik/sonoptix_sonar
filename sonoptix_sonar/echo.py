@@ -94,6 +94,10 @@ class EchoNode(Node):
             # Allow for params callback to be processed
             rclpy.spin_once(self, timeout_sec=0.01)
             
+        # Stop the transponder before destroying the node
+        requests.patch(self.api_url + '/transponder', 
+                       json={"enable": False})
+            
     def set_param_callback(self, params):
         result = SetParametersResult(successful=True)
         for param in params:
