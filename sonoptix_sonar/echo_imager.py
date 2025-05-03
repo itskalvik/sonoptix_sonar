@@ -24,7 +24,6 @@
 # SOFTWARE.
 #-----------------------------------------------------------------------------------
 
-
 import rclpy
 from rclpy.node import Node
 from rcl_interfaces.msg import SetParametersResult
@@ -40,16 +39,17 @@ import numpy as np
 
 
 class EchoImager(Node):
+
     def __init__(self, node_name='echo_imager'):
         super().__init__(node_name)
 
         # Declare Parameters
         params = {
-          'data_topic': ['sonar/echo/data', str],
-          'image_topic': ['sonar/echo/image', str],
-          'contrast': [30.0, float],
-          'bag_path': ['', str],
-          'video_file': ['', str],
+            'data_topic': ['sonar/echo/data', str],
+            'image_topic': ['sonar/echo/image', str],
+            'contrast': [30.0, float],
+            'bag_path': ['', str],
+            'video_file': ['', str],
         }
 
         for param, [value, dtype] in params.items():
@@ -69,11 +69,9 @@ class EchoImager(Node):
             self.compressed = False
 
         # Determine if output is a topic or a video
-        if len(self.video_file) == 0: 
+        if len(self.video_file) == 0:
             self.to_video = False
-            self.publisher = self.create_publisher(Image,
-                                                  self.image_topic,
-                                                  10)
+            self.publisher = self.create_publisher(Image, self.image_topic, 10)
             self.get_logger().info("Publishing data to ros2 topic")
         else:
             self.video_writer = None
@@ -81,12 +79,10 @@ class EchoImager(Node):
             self.get_logger().info("Saving data to video file")
 
         # Determine if input is a topic or a bag
-        if len(self.bag_path) == 0: 
+        if len(self.bag_path) == 0:
             self.from_bag = False
-            self.subscrber = self.create_subscription(Image,
-                                                      self.data_topic,
-                                                      self.data_callback,
-                                                      10)
+            self.subscrber = self.create_subscription(Image, self.data_topic,
+                                                      self.data_callback, 10)
             self.get_logger().info("Reading data from ros2 topic")
         else:
             self.from_bag = True
@@ -99,37 +95,35 @@ class EchoImager(Node):
             scan_image = self.br.imgmsg_to_cv2(msg)
 
         max_range = scan_image[0, 0]
-        fov = 120 if max_range <= 30 else 90        
-        scan_image = cv2.convertScaleAbs(scan_image, alpha=self.contrast, beta=0)
-        total_pix = int(((256 / 256 * (256/fov) * 360)-256)/2)
-        scan_image = cv2.copyMakeBorder(scan_image, 
-                                        0, 0, total_pix, total_pix, 
+        fov = 120 if max_range <= 30 else 90
+        scan_image = cv2.convertScaleAbs(scan_image,
+                                         alpha=self.contrast,
+                                         beta=0)
+        total_pix = int(((256 / 256 * (256 / fov) * 360) - 256) / 2)
+        scan_image = cv2.copyMakeBorder(scan_image, 0, 0, total_pix, total_pix,
                                         cv2.BORDER_CONSTANT)
         scan_image = cv2.warpPolar(scan_image.T,
-                                   dsize=(1500, 1500), 
-                                   center=(750, 750), 
-                                   maxRadius=750, 
-                                   flags=cv2.WARP_INVERSE_MAP|cv2.WARP_FILL_OUTLIERS)
+                                   dsize=(1500, 1500),
+                                   center=(750, 750),
+                                   maxRadius=750,
+                                   flags=cv2.WARP_INVERSE_MAP
+                                   | cv2.WARP_FILL_OUTLIERS)
         scan_image = cv2.rotate(scan_image, cv2.ROTATE_90_CLOCKWISE)
         if fov == 90:
             scan_image = scan_image[0:750, 200:1300]
         elif fov == 120:
-            scan_image = scan_image[0:750,75:1425]
+            scan_image = scan_image[0:750, 75:1425]
         scan_image = cv2.applyColorMap(scan_image, cv2.COLORMAP_VIRIDIS)
-        scan_image = cv2.putText(scan_image, 
-                                 f'Range: {max_range} m',
-                                 (1, 25), 
-                                 cv2.FONT_HERSHEY_SIMPLEX, 
-                                 1, (255, 255, 255), 2, 
-                                 cv2.LINE_AA)
+        scan_image = cv2.putText(scan_image, f'Range: {max_range} m', (1, 25),
+                                 cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255),
+                                 2, cv2.LINE_AA)
 
         if self.to_video:
             if self.video_writer is None:
                 height, width = scan_image.shape[:2]
                 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-                self.video_writer = cv2.VideoWriter(self.video_file, 
-                                                    fourcc, 
-                                                    self.video_fps, 
+                self.video_writer = cv2.VideoWriter(self.video_file, fourcc,
+                                                    self.video_fps,
                                                     (width, height))
                 if not self.video_writer.isOpened():
                     self.get_logger().error("Failed to open video writer.")
@@ -139,8 +133,10 @@ class EchoImager(Node):
             self.publisher.publish(self.br.cv2_to_imgmsg(scan_image))
 
     def play_bag(self):
-        storage_options = StorageOptions(uri=self.bag_path, storage_id='sqlite3')
-        converter_options = ConverterOptions(input_serialization_format='cdr', output_serialization_format='cdr')
+        storage_options = StorageOptions(uri=self.bag_path,
+                                         storage_id='sqlite3')
+        converter_options = ConverterOptions(input_serialization_format='cdr',
+                                             output_serialization_format='cdr')
         reader = SequentialReader()
         reader.open(storage_options, converter_options)
 
@@ -148,7 +144,8 @@ class EchoImager(Node):
         type_map = {t.name: t.type for t in topic_types}
         msg_type_str = type_map.get(self.data_topic, None)
         if not msg_type_str:
-            self.get_logger().error(f"Topic '{self.data_topic}' not found in bag.")
+            self.get_logger().error(
+                f"Topic '{self.data_topic}' not found in bag.")
             return
         msg_type = get_message(msg_type_str)
 
@@ -160,7 +157,7 @@ class EchoImager(Node):
                 msg = deserialize_message(data, msg_type)
                 times.append(t)
         time_del = np.diff(times)
-        self.video_fps = np.round(1.0/(np.mean(time_del)*1e-9)).astype(int)
+        self.video_fps = np.round(1.0 / (np.mean(time_del) * 1e-9)).astype(int)
         self.get_logger().info(f'{self.video_fps}')
 
         reader = SequentialReader()
@@ -185,10 +182,12 @@ class EchoImager(Node):
                 self.get_logger().info(f'Updated {param.name}: {param.value}')
         return result
 
+
 def main():
     rclpy.init()
     node = EchoImager()
     rclpy.spin(node)
+
 
 if __name__ == '__main__':
     main()

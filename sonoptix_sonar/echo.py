@@ -24,7 +24,6 @@
 # SOFTWARE.
 #-----------------------------------------------------------------------------------
 
-
 import rclpy
 from rclpy.node import Node
 from rcl_interfaces.msg import SetParametersResult
@@ -37,16 +36,17 @@ import requests
 
 
 class EchoNode(Node):
+
     def __init__(self, node_name='echo'):
         super().__init__(node_name)
 
         # Declare Parameters
         params = {
-          'range': [50, int],
-          'ip': ['192.168.2.42', str],
-          'enable_transponder': [True, bool],
-          'topic': ['sonar/echo/data', str],
-          'frame_id': ['echo', str],
+            'range': [50, int],
+            'ip': ['192.168.2.42', str],
+            'enable_transponder': [True, bool],
+            'topic': ['sonar/echo/data', str],
+            'frame_id': ['echo', str],
         }
 
         for param, [value, dtype] in params.items():
@@ -55,27 +55,27 @@ class EchoNode(Node):
             self.get_logger().info(f'{param}: {value}')
 
         # Handle parameter updates
-        self.param_handler_ptr_ = self.add_on_set_parameters_callback(self.set_param_callback)
+        self.param_handler_ptr_ = self.add_on_set_parameters_callback(
+            self.set_param_callback)
 
         self.rtsp_url = f'rtsp://{self.ip}:8554/raw'
         self.api_url = f'http://{self.ip}:8000/api/v1'
 
         self.get_logger().info(f'Configuring Sonar')
         # Set the sonar range and enable the transponder
-        requests.patch(self.api_url + '/transponder', 
-                       json={"enable": self.enable_transponder,
-                             "sonar_range": self.range})
+        requests.patch(self.api_url + '/transponder',
+                       json={
+                           "enable": self.enable_transponder,
+                           "sonar_range": self.range
+                       })
 
         # Set the data stream type to RTSP
-        requests.put(self.api_url + '/streamtype', 
-                     json={"value": 2})
+        requests.put(self.api_url + '/streamtype', json={"value": 2})
 
         self.br = CvBridge()
         self.get_logger().info(f'Accessing RTSP stream')
         self.cap = cv2.VideoCapture(self.rtsp_url)
-        self.publisher = self.create_publisher(Image, 
-                                               self.topic, 
-                                               10)
+        self.publisher = self.create_publisher(Image, self.topic, 10)
         self.get_logger().info(f'Sonoptix Echo Initialized')
 
         while rclpy.ok():
@@ -90,14 +90,13 @@ class EchoNode(Node):
             frame.header.frame_id = self.frame_id
 
             self.publisher.publish(frame)
-    
+
             # Allow for params callback to be processed
             rclpy.spin_once(self, timeout_sec=0.01)
-            
+
         # Stop the transponder before destroying the node
-        requests.patch(self.api_url + '/transponder', 
-                       json={"enable": False})
-            
+        requests.patch(self.api_url + '/transponder', json={"enable": False})
+
     def set_param_callback(self, params):
         result = SetParametersResult(successful=True)
         for param in params:
@@ -107,14 +106,18 @@ class EchoNode(Node):
                 self.get_logger().info(f'Updated {param.name}: {param.value}')
 
             if param.name in ['range', 'enable_transponder']:
-                requests.patch(self.api_url + '/transponder', 
-                               json={"enable": self.enable_transponder,
-                                     "sonar_range": self.range})
+                requests.patch(self.api_url + '/transponder',
+                               json={
+                                   "enable": self.enable_transponder,
+                                   "sonar_range": self.range
+                               })
         return result
-    
+
+
 def main():
     rclpy.init()
     node = EchoNode()
+
 
 if __name__ == '__main__':
     main()
