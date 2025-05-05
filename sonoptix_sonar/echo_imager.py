@@ -87,6 +87,7 @@ class EchoImager(Node):
         else:
             self.from_bag = True
             self.get_logger().info("Reading data from bag file")
+            self.process_bag()
 
     def data_callback(self, msg):
         if self.compressed:
@@ -132,7 +133,7 @@ class EchoImager(Node):
         else:
             self.publisher.publish(self.br.cv2_to_imgmsg(scan_image))
 
-    def play_bag(self):
+    def process_bag(self):
         storage_options = StorageOptions(uri=self.bag_file,
                                          storage_id='sqlite3')
         converter_options = ConverterOptions(input_serialization_format='cdr',
@@ -146,7 +147,7 @@ class EchoImager(Node):
         if not msg_type_str:
             self.get_logger().error(
                 f"Topic '{self.data_topic}' not found in bag.")
-            return
+            exit()
         msg_type = get_message(msg_type_str)
 
         # Estimate FPS
@@ -158,7 +159,7 @@ class EchoImager(Node):
                 times.append(t)
         time_del = np.diff(times)
         self.video_fps = np.round(1.0 / (np.mean(time_del) * 1e-9)).astype(int)
-        self.get_logger().info(f'{self.video_fps}')
+        self.get_logger().info(f'Estimated FPS: {self.video_fps}')
 
         reader = SequentialReader()
         reader.open(storage_options, converter_options)
