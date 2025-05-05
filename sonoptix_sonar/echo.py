@@ -78,24 +78,28 @@ class EchoNode(Node):
         self.publisher = self.create_publisher(Image, self.topic, 10)
         self.get_logger().info(f'Sonoptix Echo Initialized')
 
-        while rclpy.ok():
-            if not self.enable_transponder:
-                rclpy.spin_once(self, timeout_sec=1.0)
-                continue
-            _, frame = self.cap.read()
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            frame[0, 0] = self.range
-            frame = self.br.cv2_to_imgmsg(frame, encoding='mono8')
-            frame.header.stamp = self.get_clock().now().to_msg()
-            frame.header.frame_id = self.frame_id
+        try:
+            while True:
+                if not self.enable_transponder:
+                    rclpy.spin_once(self, timeout_sec=1.0)
+                    continue
+                _, frame = self.cap.read()
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                frame[0, 0] = self.range
+                frame = self.br.cv2_to_imgmsg(frame, encoding='mono8')
+                frame.header.stamp = self.get_clock().now().to_msg()
+                frame.header.frame_id = self.frame_id
 
-            self.publisher.publish(frame)
+                self.publisher.publish(frame)
 
-            # Allow for params callback to be processed
-            rclpy.spin_once(self, timeout_sec=0.01)
-
-        # Stop the transponder before destroying the node
-        requests.patch(self.api_url + '/transponder', json={"enable": False})
+                # Allow for params callback to be processed
+                rclpy.spin_once(self, timeout_sec=0.01)
+        finally:
+            # Stop the transponder before destroying the node
+            requests.patch(self.api_url + '/transponder', json={"enable": False})
+            self.get_logger().info(f'Transponder disabled')
+            self.destroy_node()
+            rclpy.shutdown()
 
     def set_param_callback(self, params):
         result = SetParametersResult(successful=True)
