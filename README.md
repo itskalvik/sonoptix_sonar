@@ -13,8 +13,8 @@ This ROS2 package provides nodes for interfacing with and visualizing data from 
 
 - [Installation](#installation)
 - [Launch Files](#launch-files)
-  - [echo_launch](#echo_launch)
-  - [echo_decompress_launch](#echo_decompress_launch)
+  - [echo.launch.py](#echolaunchpy)
+  - [echo_decompress.launch.py](#echo_decompresslaunchpy)
 - [Nodes and Usage](#nodes-and-usage)
   - [echo](#echo)
   - [echo_imager](#echo_imager)
@@ -38,7 +38,7 @@ source install/setup.bash
 
 ## Launch Files
 
-### `echo_launch`
+### `echo.launch.py`
 
 Launches the [echo](#echo) node to publish sonar data and compresses the data stream for efficient transport.
 
@@ -52,7 +52,7 @@ Launches the [echo](#echo) node to publish sonar data and compresses the data st
 ros2 launch sonoptix_sonar echo.launch.py
 ```
 
-### `echo_decompress_launch`
+### `echo_decompress.launch.py`
 
 Decompresses the previously compressed sonar echo data for downstream processing or visualization.
 
