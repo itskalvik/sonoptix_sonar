@@ -12,6 +12,9 @@ This ROS2 package provides nodes for interfacing with and visualizing data from 
 ## Table of Contents
 
 - [Installation](#installation)
+- [Launch Files](#launch-files)
+  - [echo_launch](#echo_launch)
+  - [echo_decompress_launch](#echo_decompress_launch)
 - [Nodes and Usage](#nodes-and-usage)
   - [echo](#echo)
   - [echo_imager](#echo_imager)
@@ -33,6 +36,38 @@ source install/setup.bash
 
 ---
 
+## Launch Files
+
+### `echo_launch`
+
+Launches the [echo](#echo) node to publish sonar data and compresses the data stream for efficient transport.
+
+**Published Topics:**
+- Raw sonar data: `/sonar/echo/data` (`sensor_msgs/Image`)
+- Compressed sonar data: `/sonar/echo/compressed` (`sensor_msgs/CompressedImage`)
+
+**Run Example:**
+
+```bash
+ros2 launch sonoptix_sonar echo.launch.py
+```
+
+### `echo_decompress_launch`
+
+Decompresses the previously compressed sonar echo data for downstream processing or visualization.
+
+**Subscribed Topics**: `/sonar/echo/compressed`
+
+**Published Topics**:  `/sonar/echo/data` (`sensor_msgs/Image`)
+
+**Run Example:**
+
+```bash
+ros2 launch sonoptix_sonar decompress.launch.py
+```
+
+---
+
 ## Nodes and Usage
 
 ### `echo`
@@ -41,7 +76,7 @@ source install/setup.bash
 
 **Published Topics**: `sonar/echo/data` (`sensor_msgs/Image`)
 
-**Parameters:** The parameters can be updated while running the node.
+**Parameters**: The parameters can be updated while running the node.
 
 | Name                 | Type    | Default            | Description                              |
 |----------------------|---------|--------------------|------------------------------------------|
@@ -66,7 +101,7 @@ ros2 run sonoptix_sonar echo
 
 **Published Topics**: `sonar/echo/image` (`sensor_msgs/Image`)
 
-**Parameters:** The parameters can be updated while running the node.
+**Parameters**: The parameters can be updated while running the node.
 
 | Name           | Type   | Default              | Description                              |
 |----------------|--------|----------------------|------------------------------------------|
@@ -76,7 +111,7 @@ ros2 run sonoptix_sonar echo
 | `bag_file`     | str    |                      | Optional path to an input ros2 bag file with sonar data |
 | `video_file`   | str    |                      | Optional path to an output mp4 video file |
 
-**Run Example:**
+**Run Example**:
 ```bash
 ros2 run sonoptix_sonar echo_imager
 ```
