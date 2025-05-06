@@ -42,11 +42,11 @@ source install/setup.bash
 
 Launches the [echo](#echo) node to publish sonar data and compresses the data stream for efficient transport.
 
-**Published Topics:**
+**Published Topics**:
 - Raw sonar data: `/sonar/echo/data` (`sensor_msgs/Image`)
 - Compressed sonar data: `/sonar/echo/compressed` (`sensor_msgs/CompressedImage`)
 
-**Run Example:**
+**Run Example**:
 
 ```bash
 ros2 launch sonoptix_sonar echo.launch.py
@@ -60,7 +60,7 @@ Decompresses the previously compressed sonar echo data for downstream processing
 
 **Published Topics**:  `/sonar/echo/data` (`sensor_msgs/Image`)
 
-**Run Example:**
+**Run Example**:
 
 ```bash
 ros2 launch sonoptix_sonar decompress.launch.py
@@ -86,7 +86,7 @@ ros2 launch sonoptix_sonar decompress.launch.py
 | `topic`              | str     | `/sonar/echo/data`  | Topic to publish sonar frames            |
 | `frame_id`           | str     | `echo`             |  TF frame ID                             |
 
-**Run Example:**
+**Run Example**:
 ```bash
 ros2 run sonoptix_sonar echo
 ```
