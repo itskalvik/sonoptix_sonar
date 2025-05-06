@@ -80,11 +80,11 @@ ros2 launch sonoptix_sonar decompress.launch.py
 
 | Name                 | Type    | Default            | Description                              |
 |----------------------|---------|--------------------|------------------------------------------|
-| `range`              | int     | 50                 | Sonar range in meters                    |
-| `ip`                 | str     | "192.168.2.42"     | IP address of the sonar device          |
-| `enable_transponder`| bool    | `True`             | Enable or disable the sonar transponder |
-| `topic`              | str     | `sonar/echo/data`  | Topic to publish sonar frames           |
-| `frame_id`           | str     | `echo`             |  TF frame ID             |
+| `range`              | int     | 50                 | Sonar range in meters [3-200]            |
+| `ip`                 | str     | "192.168.2.42"     | IP address of the sonar device           |
+| `enable_transponder` | bool    | `True`             | Enable or disable the sonar transponder  |
+| `topic`              | str     | `sonar/echo/data`  | Topic to publish sonar frames            |
+| `frame_id`           | str     | `echo`             |  TF frame ID                             |
 
 **Run Example:**
 ```bash
@@ -103,11 +103,11 @@ ros2 run sonoptix_sonar echo
 
 **Parameters**: The parameters can be updated while running the node.
 
-| Name           | Type   | Default              | Description                              |
-|----------------|--------|----------------------|------------------------------------------|
-| `data_topic`   | str    | `sonar/echo/data`    | Input topic for raw sonar data         |
-| `image_topic`  | str    | `sonar/echo/image`   | Output topic for visualized image       |
-| `contrast`     | float  | `30.0`               | Contrast multiplier for visualization   |
+| Name           | Type   | Default              | Description                               |
+|----------------|--------|----------------------|-------------------------------------------|
+| `data_topic`   | str    | `sonar/echo/data`    | Input topic for raw sonar data            |
+| `image_topic`  | str    | `sonar/echo/image`   | Output topic for visualized image         |
+| `contrast`     | float  | `30.0`               | Contrast multiplier for visualization     |
 | `bag_file`     | str    |                      | Optional path to an input ros2 bag file with sonar data |
 | `video_file`   | str    |                      | Optional path to an output mp4 video file |
 
