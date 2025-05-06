@@ -45,7 +45,7 @@ class EchoNode(Node):
             'range': [50, int],
             'ip': ['192.168.2.42', str],
             'enable_transponder': [True, bool],
-            'topic': ['sonar/echo/data', str],
+            'topic': ['/sonar/echo/data', str],
             'frame_id': ['echo', str],
         }
 

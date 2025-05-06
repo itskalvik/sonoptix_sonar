@@ -29,8 +29,8 @@ from launch import LaunchDescription
 
 
 def generate_launch_description():
-    data_topic = 'sonar/echo/data'
-    compressed_topic = 'sonar/echo/compressed'
+    data_topic = '/sonar/echo/data'
+    compressed_topic = '/sonar/echo/compressed'
 
     echo_decompress = Node(package='image_transport',
                            executable='republish',

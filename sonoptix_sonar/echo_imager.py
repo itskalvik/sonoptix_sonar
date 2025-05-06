@@ -45,8 +45,8 @@ class EchoImager(Node):
 
         # Declare Parameters
         params = {
-            'data_topic': ['sonar/echo/data', str],
-            'image_topic': ['sonar/echo/image', str],
+            'data_topic': ['/sonar/echo/data', str],
+            'image_topic': ['/sonar/echo/image', str],
             'contrast': [30.0, float],
             'bag_file': ['', str],
             'video_file': ['', str],

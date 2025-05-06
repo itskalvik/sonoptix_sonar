@@ -32,8 +32,8 @@ def generate_launch_description():
     # Higher is more compressed but requires more compute [1-9]
     compression_level = 5
     sonar_range = 50  # meters
-    data_topic = 'sonar/echo/data'
-    compressed_topic = 'sonar/echo/compressed'
+    data_topic = '/sonar/echo/data'
+    compressed_topic = '/sonar/echo/compressed'
 
     echo_data = Node(package='sonoptix_sonar',
                      executable='echo',

@@ -74,7 +74,7 @@ ros2 launch sonoptix_sonar decompress.launch.py
 
 **Description**: Publishes sonar profiles from the Sonoptix Echo.
 
-**Published Topics**: `sonar/echo/data` (`sensor_msgs/Image`)
+**Published Topics**: `/sonar/echo/data` (`sensor_msgs/Image`)
 
 **Parameters**: The parameters can be updated while running the node.
 
@@ -83,7 +83,7 @@ ros2 launch sonoptix_sonar decompress.launch.py
 | `range`              | int     | 50                 | Sonar range in meters [3-200]            |
 | `ip`                 | str     | "192.168.2.42"     | IP address of the sonar device           |
 | `enable_transponder` | bool    | `True`             | Enable or disable the sonar transponder  |
-| `topic`              | str     | `sonar/echo/data`  | Topic to publish sonar frames            |
+| `topic`              | str     | `/sonar/echo/data`  | Topic to publish sonar frames            |
 | `frame_id`           | str     | `echo`             |  TF frame ID                             |
 
 **Run Example:**
@@ -97,16 +97,16 @@ ros2 run sonoptix_sonar echo
 
 **Description**: Converts Echo sonar data into a polar image and publishes it.
 
-**Subscribed Topics**: `sonar/echo/data`
+**Subscribed Topics**: `/sonar/echo/data`
 
-**Published Topics**: `sonar/echo/image` (`sensor_msgs/Image`)
+**Published Topics**: `/sonar/echo/image` (`sensor_msgs/Image`)
 
 **Parameters**: The parameters can be updated while running the node.
 
 | Name           | Type   | Default              | Description                               |
 |----------------|--------|----------------------|-------------------------------------------|
-| `data_topic`   | str    | `sonar/echo/data`    | Input topic for raw sonar data            |
-| `image_topic`  | str    | `sonar/echo/image`   | Output topic for visualized image         |
+| `data_topic`   | str    | `/sonar/echo/data`    | Input topic for raw sonar data            |
+| `image_topic`  | str    | `/sonar/echo/image`   | Output topic for visualized image         |
 | `contrast`     | float  | `30.0`               | Contrast multiplier for visualization     |
 | `bag_file`     | str    |                      | Optional path to an input ros2 bag file with sonar data |
 | `video_file`   | str    |                      | Optional path to an output mp4 video file |
