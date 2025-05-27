@@ -31,7 +31,7 @@ from launch import LaunchDescription
 def generate_launch_description():
     # Higher is more compressed but requires more compute [1-9]
     compression_level = 5
-    sonar_range = 50  # meters
+    sonar_range = 12  # meters
     data_topic = '/sonar/echo/data'
     compressed_topic = '/sonar/echo/compressed'
 
