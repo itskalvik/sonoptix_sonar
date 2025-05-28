@@ -104,7 +104,7 @@ class EchoNode(Node):
         finally:
             # Stop the transponder before destroying the node
             requests.put(self.api_url + '/transceiver', json={"power_state": 'off',})
-            self.get_logger().info(f'Transponder disabled')
+            self.get_logger().info(f'Transceiver disabled')
             self.destroy_node()
             rclpy.shutdown()
 
