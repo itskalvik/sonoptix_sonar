@@ -55,7 +55,9 @@ class EchoImager(Node):
         for param, [value, dtype] in params.items():
             self.declare_parameter(param, value)
             exec(f"self.{param}:dtype = self.get_parameter(param).value")
-            self.get_logger().info(f'{param}: {value}')
+        params = self.get_parameters(params.keys())
+        for param in params:
+            self.get_logger().info(f'{param.name}: {param.value}')
 
         self.br = CvBridge()
 
@@ -71,8 +73,7 @@ class EchoImager(Node):
         # Determine if output is a topic or a video
         if len(self.video_file) == 0:
             self.to_video = False
-            self.publisher = self.create_publisher(Image, self.image_topic,
-                                                   rclpy.qos.qos_profile_sensor_data) 
+            self.publisher = self.create_publisher(Image, self.image_topic, 10) 
             self.get_logger().info("Publishing data to ros2 topic")
         else:
             self.video_writer = None
@@ -83,8 +84,7 @@ class EchoImager(Node):
         if len(self.bag_file) == 0:
             self.from_bag = False
             self.subscrber = self.create_subscription(Image, self.data_topic,
-                                                      self.data_callback,
-                                                      rclpy.qos.qos_profile_sensor_data)
+                                                      self.data_callback, 10)
             self.get_logger().info("Reading data from ros2 topic")
         else:
             self.from_bag = True
@@ -116,6 +116,7 @@ class EchoImager(Node):
             scan_image = scan_image[0:750, 200:1300]
         elif fov == 120:
             scan_image = scan_image[0:750, 75:1425]
+        scan_image = cv2.flip(scan_image, 1)
         scan_image = cv2.applyColorMap(scan_image, cv2.COLORMAP_VIRIDIS)
         scan_image = cv2.putText(scan_image, f'Range: {max_range} m', (1, 25),
                                  cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255),

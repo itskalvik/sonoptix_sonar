@@ -44,7 +44,8 @@ class EchoNode(Node):
         params = {
             'range': [50, int],
             'ip': ['192.168.2.42', str],
-            'enable_transponder': [True, bool],
+            'tx_mode': ['auto', str],
+            'power_state': [True, bool],
             'topic': ['/sonar/echo/data', str],
             'frame_id': ['echo', str],
         }
@@ -61,29 +62,32 @@ class EchoNode(Node):
             self.set_param_callback)
 
         self.rtsp_url = f'rtsp://{self.ip}:8554/raw'
-        self.api_url = f'http://{self.ip}:8000/api/v1'
+        self.api_url = f'http://{self.ip}:8000/api/v2'
 
         self.get_logger().info(f'Configuring Sonar')
-        # Set the sonar range and enable the transponder
-        requests.patch(self.api_url + '/transponder',
-                       json={
-                           "enable": self.enable_transponder,
-                           "sonar_range": self.range
+
+        # Set the sonar range, tx_mode, and enable the transponder
+        state = 'on' if self.power_state else 'off'
+        requests.put(self.api_url + '/transceiver',
+                     json={
+                           "power_state": state,
+                           "range": self.range,
+                           "tx_mode": self.tx_mode
                        })
 
         # Set the data stream type to RTSP
-        requests.put(self.api_url + '/streamtype', json={"value": 2})
+        requests.put(self.api_url + '/datastream', 
+                     json={"stream_type": 'rtsp'})
 
         self.br = CvBridge()
         self.get_logger().info(f'Accessing RTSP stream')
         self.cap = cv2.VideoCapture(self.rtsp_url)
-        self.publisher = self.create_publisher(Image, self.topic,
-                                               rclpy.qos.qos_profile_sensor_data)
+        self.publisher = self.create_publisher(Image, self.topic, 10)
         self.get_logger().info(f'Sonoptix Echo Initialized')
 
         try:
             while True:
-                if not self.enable_transponder:
+                if not self.power_state:
                     rclpy.spin_once(self, timeout_sec=1.0)
                     continue
                 _, frame = self.cap.read()
@@ -99,7 +103,7 @@ class EchoNode(Node):
                 rclpy.spin_once(self, timeout_sec=0.01)
         finally:
             # Stop the transponder before destroying the node
-            requests.patch(self.api_url + '/transponder', json={"enable": False})
+            requests.put(self.api_url + '/transceiver', json={"power_state": 'off',})
             self.get_logger().info(f'Transponder disabled')
             self.destroy_node()
             rclpy.shutdown()
@@ -112,12 +116,14 @@ class EchoNode(Node):
                 exec(f"self.{param.name} = param.value")
                 self.get_logger().info(f'Updated {param.name}: {param.value}')
 
-            if param.name in ['range', 'enable_transponder']:
-                requests.patch(self.api_url + '/transponder',
-                               json={
-                                   "enable": self.enable_transponder,
-                                   "sonar_range": self.range
-                               })
+            if param.name in ['range', 'power_state']:
+                state = 'on' if self.power_state else 'off'
+                requests.put(self.api_url + '/transceiver',
+                             json={
+                                "power_state": state,
+                                "range": self.range,
+                                "tx_mode": self.tx_mode
+                             })
         return result
 
 

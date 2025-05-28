@@ -82,8 +82,9 @@ ros2 launch sonoptix_sonar decompress.launch.py
 |----------------------|---------|--------------------|------------------------------------------|
 | `range`              | int     | 50                 | Sonar range in meters [3-200]            |
 | `ip`                 | str     | "192.168.2.42"     | IP address of the sonar device           |
-| `enable_transponder` | bool    | `True`             | Enable or disable the sonar transponder  |
-| `topic`              | str     | `/sonar/echo/data`  | Topic to publish sonar frames            |
+| `tx_mode`            | str     | "auto"             | The transmit mode of the transceiver [`auto`, `hf`, `lf`, `lflr`] |
+| `power_state`        | bool    | `True`             | The power state of the transceiver       |
+| `topic`              | str     | `/sonar/echo/data` | Topic to publish sonar frames            |
 | `frame_id`           | str     | `echo`             |  TF frame ID                             |
 
 **Run Example**:
