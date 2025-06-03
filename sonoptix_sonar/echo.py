@@ -25,8 +25,10 @@
 #-----------------------------------------------------------------------------------
 
 import rclpy
+from rclpy import qos
 from rclpy.node import Node
 from rcl_interfaces.msg import SetParametersResult
+from rclpy.qos_overriding_options import QoSOverridingOptions
 
 import cv2
 from cv_bridge import CvBridge
@@ -57,6 +59,15 @@ class EchoNode(Node):
         for param in params:
             self.get_logger().info(f'{param.name}: {param.value}')
 
+        qos_override_opts = QoSOverridingOptions(
+            policy_kinds=(
+                qos.QoSPolicyKind.HISTORY,
+                qos.QoSPolicyKind.DEPTH,
+                qos.QoSPolicyKind.RELIABILITY,
+                )
+        )
+        SENSOR_QOS = rclpy.qos.qos_profile_sensor_data
+
         # Handle parameter updates
         self.param_handler_ptr_ = self.add_on_set_parameters_callback(
             self.set_param_callback)
@@ -82,7 +93,8 @@ class EchoNode(Node):
         self.br = CvBridge()
         self.get_logger().info(f'Accessing RTSP stream')
         self.cap = cv2.VideoCapture(self.rtsp_url)
-        self.publisher = self.create_publisher(Image, self.topic, 10)
+        self.publisher = self.create_publisher(Image, self.topic, SENSOR_QOS,
+                                               qos_overriding_options=qos_override_opts) 
         self.get_logger().info(f'Sonoptix Echo Initialized')
 
         try:
@@ -111,6 +123,8 @@ class EchoNode(Node):
     def set_param_callback(self, params):
         result = SetParametersResult(successful=True)
         for param in params:
+            if "qos" in param.name:
+                continue
             exec(f"self.flag = self.{param.name} != param.value")
             if self.flag:
                 exec(f"self.{param.name} = param.value")

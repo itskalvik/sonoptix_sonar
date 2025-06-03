@@ -25,8 +25,10 @@
 #-----------------------------------------------------------------------------------
 
 import rclpy
+from rclpy import qos
 from rclpy.node import Node
 from rcl_interfaces.msg import SetParametersResult
+from rclpy.qos_overriding_options import QoSOverridingOptions
 
 import cv2
 from cv_bridge import CvBridge
@@ -60,6 +62,14 @@ class EchoImager(Node):
             self.get_logger().info(f'{param.name}: {param.value}')
 
         self.br = CvBridge()
+        qos_override_opts = QoSOverridingOptions(
+            policy_kinds=(
+                qos.QoSPolicyKind.HISTORY,
+                qos.QoSPolicyKind.DEPTH,
+                qos.QoSPolicyKind.RELIABILITY,
+                )
+        )
+        SENSOR_QOS = rclpy.qos.qos_profile_sensor_data
 
         # Handle parameter updates
         self.add_on_set_parameters_callback(self.set_param_callback)
@@ -73,7 +83,8 @@ class EchoImager(Node):
         # Determine if output is a topic or a video
         if len(self.video_file) == 0:
             self.to_video = False
-            self.publisher = self.create_publisher(Image, self.image_topic, 10) 
+            self.publisher = self.create_publisher(Image, self.image_topic, SENSOR_QOS,
+                                                   qos_overriding_options=qos_override_opts) 
             self.get_logger().info("Publishing data to ros2 topic")
         else:
             self.video_writer = None
@@ -84,7 +95,8 @@ class EchoImager(Node):
         if len(self.bag_file) == 0:
             self.from_bag = False
             self.subscrber = self.create_subscription(Image, self.data_topic,
-                                                      self.data_callback, 10)
+                                                      self.data_callback, SENSOR_QOS,
+                                                      qos_overriding_options=qos_override_opts)
             self.get_logger().info("Reading data from ros2 topic")
         else:
             self.from_bag = True
@@ -180,6 +192,8 @@ class EchoImager(Node):
     def set_param_callback(self, params):
         result = SetParametersResult(successful=True)
         for param in params:
+            if "qos" in param.name:
+                continue
             exec(f"self.flag = self.{param.name} != param.value")
             if self.flag:
                 exec(f"self.{param.name} = param.value")
