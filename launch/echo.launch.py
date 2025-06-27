@@ -46,8 +46,8 @@ def generate_launch_description():
     echo_transport = Node(package='image_transport',
                           executable='republish',
                           name='echo_transport',
-                          arguments=['raw'],
-                          remappings=[('in', data_topic), ('out', data_topic),
+                          arguments=['raw', 'compressed'], # input data, output data
+                          remappings=[('in', data_topic),
                                       ('out/compressed', compressed_topic)],
                           parameters=[{
                               'out.format': 'png',
