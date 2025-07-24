@@ -120,7 +120,7 @@ ros2 run sonoptix_sonar echo
 
 | Name           | Type   | Default              | Description                               |
 |----------------|--------|----------------------|-------------------------------------------|
-| `data_topic`   | str    | `/sonar/echo/data`    | Input topic for sonar data (raw or compressed) |
+| `data_topic`   | str    | `/sonar/echo/compressed`    | Input topic for sonar data (raw or compressed) |
 | `image_topic`  | str    | `/sonar/echo/image`   | Output topic for visualized image         |
 | `contrast`     | float  | `10.0`               | Contrast multiplier for visualization     |
 | `bag_file`     | str    |                      | Optional path to an input ros2 bag file with sonar data |
@@ -128,7 +128,7 @@ ros2 run sonoptix_sonar echo
 
 **Run Example**:
 ```bash
-ros2 run sonoptix_sonar echo_imager
+ros2 run sonoptix_sonar echo_imager --ros-args -p contrast:=10 -p data_topic:=/sonar/echo/data
 ```
 
 Note that when reading from a bag file, the node will export the output to `echo_sonar.mp4` video file by default. 

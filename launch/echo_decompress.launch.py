@@ -31,12 +31,17 @@ from launch import LaunchDescription
 def generate_launch_description():
     data_topic = '/sonar/echo/data'
     compressed_topic = '/sonar/echo/compressed'
+    # QoS Config
+    reliability = 'best_effort'
 
     echo_decompress = Node(package='image_transport',
                            executable='republish',
                            arguments=['compressed', 'raw'],
                            remappings=[('in/compressed', compressed_topic),
                                        ('out', data_topic)],
+                          parameters=[{
+                              'qos_overrides./parameter_events.publisher.reliability': reliability
+                          }],
                            output='screen')
 
     return LaunchDescription([echo_decompress])
