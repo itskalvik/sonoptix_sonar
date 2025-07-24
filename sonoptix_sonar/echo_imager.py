@@ -32,7 +32,7 @@ from rclpy.qos_overriding_options import QoSOverridingOptions
 
 import cv2
 from cv_bridge import CvBridge
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import Image, CompressedImage
 
 from rosbag2_py import SequentialReader, StorageOptions, ConverterOptions
 from rclpy.serialization import deserialize_message
@@ -47,7 +47,7 @@ class EchoImager(Node):
 
         # Declare Parameters
         params = {
-            'data_topic': ['/sonar/echo/data', str],
+            'data_topic': ['/sonar/echo/compressed', str],
             'image_topic': ['/sonar/echo/image', str],
             'contrast': [10.0, float],
             'bag_file': ['', str],
@@ -77,30 +77,36 @@ class EchoImager(Node):
         # Determine if topic is compressed
         if 'compressed' in self.data_topic:
             self.compressed = True
+            data_type = CompressedImage
         else:
             self.compressed = False
+            data_type = Image
+
+        # Determine if input is a node or a bag
+        if len(self.bag_file) == 0:
+            self.from_bag = False
+            self.subscrber = self.create_subscription(data_type, self.data_topic,
+                                                      self.data_callback, SENSOR_QOS,
+                                                      qos_overriding_options=qos_override_opts)
+            self.get_logger().info("Reading data from ros2 node")
+        else:
+            self.from_bag = True
+            self.get_logger().info("Reading data from bag file")
 
         # Determine if output is a topic or a video
-        if len(self.video_file) == 0:
+        if len(self.video_file) == 0 and not self.from_bag:
             self.to_video = False
             self.publisher = self.create_publisher(Image, self.image_topic, SENSOR_QOS,
                                                    qos_overriding_options=qos_override_opts) 
             self.get_logger().info("Publishing data to ros2 topic")
         else:
+            if len(self.video_file) == 0:
+                self.video_file = 'echo_sonar.mp4'
             self.video_writer = None
             self.to_video = True
-            self.get_logger().info("Saving data to video file")
+            self.get_logger().info(f"Saving data to video file: {self.video_file}")
 
-        # Determine if input is a topic or a bag
-        if len(self.bag_file) == 0:
-            self.from_bag = False
-            self.subscrber = self.create_subscription(Image, self.data_topic,
-                                                      self.data_callback, SENSOR_QOS,
-                                                      qos_overriding_options=qos_override_opts)
-            self.get_logger().info("Reading data from ros2 topic")
-        else:
-            self.from_bag = True
-            self.get_logger().info("Reading data from bag file")
+        if self.from_bag:
             self.process_bag()
 
     def data_callback(self, msg):
@@ -161,7 +167,7 @@ class EchoImager(Node):
         msg_type_str = type_map.get(self.data_topic, None)
         if not msg_type_str:
             self.get_logger().error(
-                f"Topic '{self.data_topic}' not found in bag.")
+                f"Topic '{self.data_topic}' not found in bag!")
             exit()
         msg_type = get_message(msg_type_str)
 
@@ -173,20 +179,26 @@ class EchoImager(Node):
                 msg = deserialize_message(data, msg_type)
                 times.append(t)
         time_del = np.diff(times)
-        self.video_fps = np.round(1.0 / (np.mean(time_del) * 1e-9)).astype(int)
+        self.video_fps = np.round(1.0 / (np.median(time_del) * 1e-9)).astype(int)
         self.get_logger().info(f'Estimated FPS: {self.video_fps}')
+        self.get_logger().info(f'Total Frames: {len(times)}')
 
         reader = SequentialReader()
         reader.open(storage_options, converter_options)
+        frame_num = 0
         while reader.has_next():
             (topic, data, t) = reader.read_next()
             if topic == self.data_topic:
                 msg = deserialize_message(data, msg_type)
                 self.data_callback(msg)
+                frame_num += 1
+                if frame_num % 50 == 0:
+                    self.get_logger().info(f'Processed Frames: {frame_num}/{len(times)}')
+        self.get_logger().info(f'Finished processing all frames!')
 
         if self.to_video:
             self.video_writer.release()
-            self.get_logger().info('Finished writing to video file')
+            self.get_logger().info(f'Finished writing to video file: {self.video_file}')
             exit()
 
     def set_param_callback(self, params):
