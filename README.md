@@ -7,10 +7,10 @@ This ROS2 package provides nodes for interfacing with and visualizing data from 
 - `echo`: Publishes sonar data from the Echo sonar.
 - `echo_imager`: Converts and visualizes the published sonar data into a color-mapped polar image for better interpretability. The node can also be used to read sonar data from bag files and export it to a `mp4` video file.
 
-##### Joy Ride in a Pool
+#### Sonar Data from a Joy Ride in a Pool
 ![Alt text](.assets/joy_ride.gif)
 
-##### Different Range Settings
+#### Sonar Data with Different Range Settings
 ![Alt text](.assets/range_demo.gif)
 ---
 
