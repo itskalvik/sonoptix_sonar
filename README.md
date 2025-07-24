@@ -4,8 +4,15 @@
 
 This ROS2 package provides nodes for interfacing with and visualizing data from the [**Sonoptix Echo**](https://bluerobotics.com/store/sonars/imaging-sonars/sonoptix-echo/) sonar. It includes two nodes:
 
-- `echo`: Publishes sonar data from the Echo sonar.
-- `echo_imager`: Converts and visualizes the published sonar data into a color-mapped polar image for better interpretability. The node can also be used to read sonar data from bag files and export it to a `mp4` video file.
+- `echo`: 
+  * Publishes sonar data from the Echo sonar
+  * Allows updating sonar range settings while running
+  * Allows starting/spotting the sonar transponder (saves power)
+- `echo_imager`: 
+  * Visualizes the published sonar data as a color-mapped polar image for better interpretability
+  * Supports reading raw and compressed sonar data
+  * Supports reading sonar data from a ros node or from a bag file
+  * Supports exporting the data to an `mp4` video file
 
 #### Sonar Data from a Joy Ride in a Pool
 ![Alt text](.assets/joy_ride.gif)
@@ -46,6 +53,7 @@ source install/setup.bash
 ### `echo.launch.py`
 
 Launches the [echo](#echo) node to publish sonar data and compresses the data stream for efficient transport.
+The [echo](#echo) node publisher with `best_effort` reliability QoS setting, this can be changed from the launch file or using the `ros2 param set` command.
 
 **Published Topics**:
 - Raw sonar data: `/sonar/echo/data` (`sensor_msgs/Image`)
@@ -57,9 +65,15 @@ Launches the [echo](#echo) node to publish sonar data and compresses the data st
 ros2 launch sonoptix_sonar echo.launch.py
 ```
 
+Use the following command to upate the range setting:
+
+```bash
+ros2 param set /echo range:=<[3 - 200] integer value>
+```
+
 ### `echo_decompress.launch.py`
 
-Decompresses the previously compressed sonar echo data for downstream processing or visualization.
+Decompresses the previously compressed sonar echo data for downstream processing or visualization. This node is usually used when processing sonar data from a bag file.
 
 **Subscribed Topics**: `/sonar/echo/compressed`
 
@@ -111,9 +125,9 @@ ros2 run sonoptix_sonar echo
 
 | Name           | Type   | Default              | Description                               |
 |----------------|--------|----------------------|-------------------------------------------|
-| `data_topic`   | str    | `/sonar/echo/data`    | Input topic for raw sonar data            |
+| `data_topic`   | str    | `/sonar/echo/data`    | Input topic for sonar data (raw or compressed) |
 | `image_topic`  | str    | `/sonar/echo/image`   | Output topic for visualized image         |
-| `contrast`     | float  | `30.0`               | Contrast multiplier for visualization     |
+| `contrast`     | float  | `10.0`               | Contrast multiplier for visualization     |
 | `bag_file`     | str    |                      | Optional path to an input ros2 bag file with sonar data |
 | `video_file`   | str    |                      | Optional path to an output mp4 video file |
 
@@ -121,6 +135,8 @@ ros2 run sonoptix_sonar echo
 ```bash
 ros2 run sonoptix_sonar echo_imager
 ```
+
+Note that when reading from a bag file, the node will export the output to `echo_sonar.mp4` video file by default. 
 
 ---
 
