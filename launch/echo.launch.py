@@ -35,7 +35,7 @@ def generate_launch_description():
     data_topic = '/sonar/echo/data'
     compressed_topic = '/sonar/echo/compressed'
     # QoS Config
-    reliability = 'reliable'
+    reliability = 'best_effort'
 
     echo_data = Node(package='sonoptix_sonar',
                      executable='echo',
@@ -59,4 +59,4 @@ def generate_launch_description():
                           }],
                           output='screen')
 
-    return LaunchDescription([echo_data])
+    return LaunchDescription([echo_data, echo_transport])
