@@ -24,6 +24,12 @@
 # SOFTWARE.
 #-----------------------------------------------------------------------------------
 
+"""
+This script is a ROS 2 node that interfaces with a Sonoptix sonar.
+It captures data from the sonar, processes it, and publishes it as a ROS 2 Image message.
+The node also provides a service to control the sonar's power state, range, and other parameters.
+"""
+
 import rclpy
 from rclpy import qos
 from rclpy.node import Node
@@ -38,11 +44,17 @@ import requests
 
 
 class EchoNode(Node):
-
+    """
+    The main class for the sonar node.
+    """
     def __init__(self, node_name='echo'):
+        """
+        Initializes the node, parameters, publisher, and services.
+        """
         super().__init__(node_name)
 
-        # Declare Parameters
+        # --- Parameters ---
+        # Declare and get parameters for the node.
         params = {
             'range': [50, int],
             'ip': ['192.168.2.42', str],
@@ -90,6 +102,7 @@ class EchoNode(Node):
         requests.put(self.api_url + '/datastream', 
                      json={"stream_type": 'rtsp'})
 
+        # Initialize CV bridge, video capture, and ros2 publisher
         self.br = CvBridge()
         self.get_logger().info(f'Accessing RTSP stream')
         self.cap = cv2.VideoCapture(self.rtsp_url)
@@ -97,6 +110,7 @@ class EchoNode(Node):
                                                qos_overriding_options=qos_override_opts) 
         self.get_logger().info(f'Sonoptix Echo Initialized')
 
+        # Read and publish sonar data when available
         try:
             while True:
                 if not self.power_state:
@@ -121,8 +135,13 @@ class EchoNode(Node):
             rclpy.shutdown()
 
     def set_param_callback(self, params):
+        """
+        This function is the callback for when parameters are changed.
+        It updates the node's attributes and sends the new settings to the sonar.
+        """
         result = SetParametersResult(successful=True)
         for param in params:
+            # QoS setting are handled by QoSOverridingOptions
             if "qos" in param.name:
                 continue
             exec(f"self.flag = self.{param.name} != param.value")
@@ -130,6 +149,7 @@ class EchoNode(Node):
                 exec(f"self.{param.name} = param.value")
                 self.get_logger().info(f'Updated {param.name}: {param.value}')
 
+            # Configure sonar if necessary
             if param.name in ['range', 'power_state']:
                 state = 'on' if self.power_state else 'off'
                 requests.put(self.api_url + '/transceiver',
@@ -141,9 +161,15 @@ class EchoNode(Node):
         return result
 
 
-def main():
-    rclpy.init()
-    node = EchoNode()
+def main(args=None):
+    """
+    The main function to run the node.
+    """
+    rclpy.init(args=args)
+    echo = EchoNode()
+    rclpy.spin(echo)
+    echo.destroy_node()
+    rclpy.shutdown()
 
 
 if __name__ == '__main__':
