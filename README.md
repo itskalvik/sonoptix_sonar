@@ -1,18 +1,6 @@
 # Sonoptix Sonar ROS2 Package
 
-## Overview
-
-This ROS2 package provides nodes for interfacing with and visualizing data from the [**Sonoptix Echo**](https://bluerobotics.com/store/sonars/imaging-sonars/sonoptix-echo/) sonar. It includes two nodes:
-
-- `echo`: 
-  * Publishes sonar data from the Echo sonar
-  * Allows updating sonar range settings while running
-  * Allows starting/spotting the sonar transponder (saves power)
-- `echo_imager`: 
-  * Visualizes the published sonar data as a color-mapped polar image for better interpretability
-  * Supports reading raw and compressed sonar data
-  * Supports reading sonar data from a ros node or from a bag file
-  * Supports exporting the data to an `mp4` video file
+This ROS 2 package provides a driver and processing node for a [**Sonoptix Echo**](https://bluerobotics.com/store/sonars/imaging-sonars/sonoptix-echo/). It allows you to interface with the sonar, capture raw data, and convert it into a polar image for visualization.
 
 #### Sonar Data from a Joy Ride in a Pool
 ![Alt text](.assets/joy_ride.gif)
@@ -22,20 +10,27 @@ This ROS2 package provides nodes for interfacing with and visualizing data from 
 ---
 
 ## Table of Contents
-
+- [Overview](#overview)
 - [Installation](#installation)
 - [Launch Files](#launch-files)
   - [echo.launch.py](#echolaunchpy)
   - [echo_decompress.launch.py](#echo_decompresslaunchpy)
-- [Nodes and Usage](#nodes-and-usage)
+- [Nodes](#nodes)
   - [echo](#echo)
   - [echo_imager](#echo_imager)
 - [License](#license)
 
 ---
 
+## Overview
+This package contains two main nodes:
+
+* **`echo.py`**: A driver node that interfaces directly with the Sonoptix sonar hardware. It captures raw sonar data and publishes it as a ROS 2 sensor_msgs/Image message.
+
+* **`echo_imager.py`**: A processing node that subscribes to the raw sonar data, converts it into a polar (fan-shaped) image, and can either publish this image on a new topic or save it to a video file. This node can also process data from a ROS 2 bag file.
+
 ## Installation
-Install [Sonoptix Sonar](https://github.com/itskalvik/sonoptix_sonar) ROS2 package:
+To install the [sonoptix_sonar]((https://github.com/itskalvik/sonoptix_sonar) ) package, clone this repository into your ROS 2 workspace and build it using `colcon`:
 
 ```bash
 cd ~/ros2_ws/src
@@ -87,7 +82,7 @@ ros2 launch sonoptix_sonar decompress.launch.py
 
 ---
 
-## Nodes and Usage
+## Nodes
 
 ### `echo`
 
