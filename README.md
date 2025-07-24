@@ -1,6 +1,6 @@
 # Sonoptix Sonar ROS2 Package
 
-This ROS 2 package provides a driver and processing node for a [**Sonoptix Echo**](https://bluerobotics.com/store/sonars/imaging-sonars/sonoptix-echo/). It allows you to interface with the sonar, capture raw data, and convert it into a polar image for visualization.
+This ROS 2 package provides a driver and processing node for the [**Sonoptix Echo sonar**](https://bluerobotics.com/store/sonars/imaging-sonars/sonoptix-echo/). It allows you to interface with the sonar, capture raw data, and convert it into a polar image for visualization.
 
 #### Sonar Data from a Joy Ride in a Pool
 ![Alt text](.assets/joy_ride.gif)
