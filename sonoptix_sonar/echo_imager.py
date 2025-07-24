@@ -24,12 +24,20 @@
 # SOFTWARE.
 #-----------------------------------------------------------------------------------
 
+"""
+This script is a ROS 2 node that processes raw sonar data from an 'echo.py' node.
+It subscribes to the sonar's image topic, converts the raw data into a polar image,
+and can save the output as a video file or publish it as a new image topic.
+The node can also process data from a ROS 2 bag file.
+"""
+
 import rclpy
 from rclpy import qos
 from rclpy.node import Node
 from rcl_interfaces.msg import SetParametersResult
 from rclpy.qos_overriding_options import QoSOverridingOptions
 
+import os
 import cv2
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image, CompressedImage
@@ -41,11 +49,17 @@ import numpy as np
 
 
 class EchoImager(Node):
-
+    """
+    The main class for the sonar imager node.
+    """
     def __init__(self, node_name='echo_imager'):
+        """
+        Initializes the node, parameters, subscriber, and other necessary objects.
+        """
         super().__init__(node_name)
 
-        # Declare Parameters
+        # --- Parameters ---
+        # Declare and get parameters for the node.
         params = {
             'data_topic': ['/sonar/echo/compressed', str],
             'image_topic': ['/sonar/echo/image', str],
@@ -106,17 +120,28 @@ class EchoImager(Node):
             self.to_video = True
             self.get_logger().info(f"Saving data to video file: {self.video_file}")
 
+        # --- Bag Processing ---
+        # If a bag file is provided, start the processing
         if self.from_bag:
             self.process_bag()
 
     def data_callback(self, msg):
+        """
+        Callback function to process incoming sonar image data.
+        This function is called for each message received on the data_topic.
+        """ 
+        # Convert the ROS 2 Image message to an OpenCV image (numpy array).
         if self.compressed:
             scan_image = self.br.compressed_imgmsg_to_cv2(msg)
         else:
             scan_image = self.br.imgmsg_to_cv2(msg)
 
+        # Extract the range value embedded in the top-left pixel
+        # and use it to determine the sonar FoV (120 if <= 30; 90 if > 30)
         max_range = scan_image[0, 0]
         fov = 120 if max_range <= 30 else 90
+
+        # Warp the linear sonar scan data into a polar representation
         scan_image = cv2.convertScaleAbs(scan_image,
                                          alpha=self.contrast,
                                          beta=0)
@@ -140,7 +165,9 @@ class EchoImager(Node):
                                  cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255),
                                  2, cv2.LINE_AA)
 
+        # --- Publishing/Saving ---
         if self.to_video:
+            # Write the processed frame to the video file
             if self.video_writer is None:
                 height, width = scan_image.shape[:2]
                 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
@@ -152,9 +179,20 @@ class EchoImager(Node):
                     return
             self.video_writer.write(scan_image)
         else:
+            # If not saving to video, publish the frame as a ROS 2 message
             self.publisher.publish(self.br.cv2_to_imgmsg(scan_image))
 
     def process_bag(self):
+        """
+        Processes a ROS 2 bag file to extract and convert sonar images
+        """
+        # Check if the bag file exists.
+        if not os.path.exists(self.bag_file):
+            self.get_logger().error(f"Bag file not found: {self.bag_file}!")
+            exit()
+        self.get_logger().info(f"Processing bag file: {self.bag_file}")
+
+        # --- Setup Bag Reader ---
         storage_options = StorageOptions(uri=self.bag_file,
                                          storage_id='sqlite3')
         converter_options = ConverterOptions(input_serialization_format='cdr',
@@ -162,6 +200,7 @@ class EchoImager(Node):
         reader = SequentialReader()
         reader.open(storage_options, converter_options)
 
+        # Get the message type for the specified data topic.
         topic_types = reader.get_all_topics_and_types()
         type_map = {t.name: t.type for t in topic_types}
         msg_type_str = type_map.get(self.data_topic, None)
@@ -171,7 +210,7 @@ class EchoImager(Node):
             exit()
         msg_type = get_message(msg_type_str)
 
-        # Estimate FPS
+        # --- First Pass: Get Timestamps to Estimate FPS ---
         times = []
         while reader.has_next():
             (topic, data, t) = reader.read_next()
@@ -183,6 +222,7 @@ class EchoImager(Node):
         self.get_logger().info(f'Estimated FPS: {self.video_fps}')
         self.get_logger().info(f'Total Frames: {len(times)}')
 
+        # --- Second Pass: Process Messages ---
         reader = SequentialReader()
         reader.open(storage_options, converter_options)
         frame_num = 0
@@ -196,14 +236,19 @@ class EchoImager(Node):
                     self.get_logger().info(f'Processed Frames: {frame_num}/{len(times)}')
         self.get_logger().info(f'Finished processing all frames!')
 
-        if self.to_video:
-            self.video_writer.release()
-            self.get_logger().info(f'Finished writing to video file: {self.video_file}')
-            exit()
+        # --- Cleanup ---
+        self.video_writer.release()
+        self.get_logger().info(f'Finished writing to video file: {self.video_file}')
+        exit()
 
     def set_param_callback(self, params):
+        """
+        This function is the callback for when parameters are changed.
+        It updates the node's attributes and sends the new settings to the sonar.
+        """
         result = SetParametersResult(successful=True)
         for param in params:
+            # QoS setting are handled by QoSOverridingOptions
             if "qos" in param.name:
                 continue
             exec(f"self.flag = self.{param.name} != param.value")
@@ -213,10 +258,17 @@ class EchoImager(Node):
         return result
 
 
-def main():
-    rclpy.init()
-    node = EchoImager()
-    rclpy.spin(node)
+def main(args=None):
+    """
+    The main function to run the node.
+    """
+    rclpy.init(args=args)
+    echo_imager = EchoImager()
+    # If not processing a bag, spin the node to keep it alive.
+    if echo_imager.bag_file == '':
+        rclpy.spin(echo_imager)
+    echo_imager.destroy_node()
+    rclpy.shutdown()
 
 
 if __name__ == '__main__':
