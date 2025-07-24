@@ -4,9 +4,14 @@
 
 This ROS2 package provides nodes for interfacing with and visualizing data from the [**Sonoptix Echo**](https://bluerobotics.com/store/sonars/imaging-sonars/sonoptix-echo/) sonar. It includes two nodes:
 
-- `echo`: Publishes sonar data from the Echo device.
-- `echo_imager`: Converts and visualizes the published sonar data into a color-mapped polar image for better interpretability.
+- `echo`: Publishes sonar data from the Echo sonar.
+- `echo_imager`: Converts and visualizes the published sonar data into a color-mapped polar image for better interpretability. The node can also be used to read sonar data from bag files and export it to a `mp4` video file.
 
+##### Joy Ride in a Pool
+![Alt text](.assets/joy_ride.gif)
+
+##### Different Range Settings
+![Alt text](.assets/range_demo.gif)
 ---
 
 ## Table of Contents
