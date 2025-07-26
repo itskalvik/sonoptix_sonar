@@ -7,6 +7,7 @@ This ROS 2 package provides a driver and processing node for the [**Sonoptix Ech
 
 #### Sonar Data with Different Range Settings
 ![Alt text](.assets/range_demo.gif)
+
 ---
 
 ## Table of Contents
