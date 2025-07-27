@@ -2,7 +2,7 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>sonoptix_sonar</name>
-  <version>0.0.1</version>
+  <version>0.0.2</version>
   <description>ROS 2 interface for Sonoptix sonars</description>
   <maintainer email="itskalvik@gmail.com">ItsKalvik</maintainer>
   <license>MIT</license>
