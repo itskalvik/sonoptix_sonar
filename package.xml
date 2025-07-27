@@ -11,6 +11,8 @@
   <depend>cv_bridge</depend>
   <depend>sensor_msgs</depend>
   <depend>image_transport</depend>
+  <depend>compressed_image_transport</depend>
+  <depend>python3-requests</depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
