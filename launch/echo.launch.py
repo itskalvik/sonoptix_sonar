@@ -53,9 +53,9 @@ def generate_launch_description():
                           remappings=[('in', data_topic),
                                       ('out/compressed', compressed_topic)],
                           parameters=[{
-                              'out.format': 'png',
-                              'out.png_level': compression_level,
-                              'qos_overrides./parameter_events.publisher.reliability': reliability
+                              'out.compressed.format': 'png',
+                              'out.compressed.png_level': compression_level,
+                              f'qos_overrides.{compressed_topic}.publisher.reliability': reliability
                           }],
                           output='screen')
 
