@@ -39,13 +39,13 @@ from rclpy.qos_overriding_options import QoSOverridingOptions
 
 import os
 import cv2
+import numpy as np
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image, CompressedImage
 
 from rosbag2_py import SequentialReader, StorageOptions, ConverterOptions
 from rclpy.serialization import deserialize_message
 from rosidl_runtime_py.utilities import get_message
-import numpy as np
 
 
 class EchoImager(Node):
@@ -61,27 +61,27 @@ class EchoImager(Node):
         # --- Parameters ---
         # Declare and get parameters for the node.
         params = {
-            'data_topic': ['/sonar/echo/compressed', str],
-            'image_topic': ['/sonar/echo/image', str],
-            'contrast': [10.0, float],
-            'bag_file': ['', str],
-            'video_file': ['', str],
+            'data_topic': '/sonar/echo/compressed',
+            'image_topic': '/sonar/echo/image',
+            'contrast': 10.0,
+            'bag_file': '',
+            'video_file': '',
         }
 
-        for param, [value, dtype] in params.items():
+        for param, value in params.items():
             self.declare_parameter(param, value)
-            exec(f"self.{param}:dtype = self.get_parameter(param).value")
-        params = self.get_parameters(params.keys())
-        for param in params:
-            self.get_logger().info(f'{param.name}: {param.value}')
+            setattr(self, param, self.get_parameter(param).value)
+            self.get_logger().info(f'{param}: {value}')
 
         self.br = CvBridge()
+        self.video_fps = 15  # Default FPS for live stream recording
+        
         qos_override_opts = QoSOverridingOptions(
             policy_kinds=(
                 qos.QoSPolicyKind.HISTORY,
                 qos.QoSPolicyKind.DEPTH,
                 qos.QoSPolicyKind.RELIABILITY,
-                )
+            )
         )
         SENSOR_QOS = rclpy.qos.qos_profile_sensor_data
 
@@ -89,29 +89,26 @@ class EchoImager(Node):
         self.add_on_set_parameters_callback(self.set_param_callback)
 
         # Determine if topic is compressed
-        if 'compressed' in self.data_topic:
-            self.compressed = True
-            data_type = CompressedImage
-        else:
-            self.compressed = False
-            data_type = Image
+        self.compressed = 'compressed' in self.data_topic
+        data_type = CompressedImage if self.compressed else Image
 
-        # Determine if input is a node or a bag
+        # Determine input source
         if len(self.bag_file) == 0:
             self.from_bag = False
-            self.subscrber = self.create_subscription(data_type, self.data_topic,
-                                                      self.data_callback, SENSOR_QOS,
-                                                      qos_overriding_options=qos_override_opts)
+            self.subscription = self.create_subscription(
+                data_type, self.data_topic, self.data_callback, 
+                SENSOR_QOS, qos_overriding_options=qos_override_opts)
             self.get_logger().info("Reading data from ros2 node")
         else:
             self.from_bag = True
             self.get_logger().info("Reading data from bag file")
 
-        # Determine if output is a topic or a video
+        # Determine output destination
         if len(self.video_file) == 0 and not self.from_bag:
             self.to_video = False
-            self.publisher = self.create_publisher(Image, self.image_topic, SENSOR_QOS,
-                                                   qos_overriding_options=qos_override_opts) 
+            self.publisher = self.create_publisher(
+                Image, self.image_topic, SENSOR_QOS, 
+                qos_overriding_options=qos_override_opts) 
             self.get_logger().info("Publishing data to ros2 topic")
         else:
             if len(self.video_file) == 0:
@@ -120,10 +117,46 @@ class EchoImager(Node):
             self.to_video = True
             self.get_logger().info(f"Saving data to video file: {self.video_file}")
 
-        # --- Bag Processing ---
-        # If a bag file is provided, start the processing
         if self.from_bag:
             self.process_bag()
+
+    def warp_sonar(self, scan_image, contrast, fov):
+        """
+        The new version of sonar warping logic.
+        """
+        # Contrast adjustment
+        scan_image = cv2.convertScaleAbs(scan_image, alpha=contrast, beta=0)
+        h, w = scan_image.shape
+        
+        # Calculate padding to represent a full 360 degrees
+        px_per_deg = w / fov
+        total_360_px = int(px_per_deg * 360)
+        padding = (total_360_px - w) // 2
+        scan_image = cv2.copyMakeBorder(scan_image, 0, 0, padding, padding, 
+                                        cv2.BORDER_CONSTANT, value=0)
+
+        # Transpose for warpPolar
+        scan_image = scan_image.T 
+        
+        # Polar Warp
+        scan_image = cv2.warpPolar(scan_image,
+                                   dsize=(h*2, h*2),
+                                   center=(h, h),
+                                   maxRadius=h,
+                                   flags=cv2.WARP_INVERSE_MAP | cv2.WARP_FILL_OUTLIERS)
+        
+        # Rotate so the sonar head is at the top center
+        scan_image = cv2.rotate(scan_image, cv2.ROTATE_90_CLOCKWISE)
+
+        # Calculate final crop to remove empty pixels
+        d = int(np.ceil(2 * h * np.sin(np.deg2rad(fov / 2))))
+        s = (h * 2 - d) // 2
+        scan_image = scan_image[0:h, s:s+d]
+        
+        # Flip to match standard sonar display
+        scan_image = cv2.flip(scan_image, 1)
+        
+        return scan_image
 
     def data_callback(self, msg):
         """
@@ -136,51 +169,31 @@ class EchoImager(Node):
         else:
             scan_image = self.br.imgmsg_to_cv2(msg)
 
-        # Extract the range value embedded in the top-left pixel
-        # and use it to determine the sonar FoV (120 if <= 30; 90 if > 30)
+        # Logic for range and fov
         max_range = scan_image[0, 0]
         fov = 120 if max_range <= 30 else 90
 
-        # Warp the linear sonar scan data into a polar representation
-        scan_image = cv2.convertScaleAbs(scan_image,
-                                         alpha=self.contrast,
-                                         beta=0)
-        total_pix = int(((256 / 256 * (256 / fov) * 360) - 256) / 2)
-        scan_image = cv2.copyMakeBorder(scan_image, 0, 0, total_pix, total_pix,
-                                        cv2.BORDER_CONSTANT)
-        scan_image = cv2.warpPolar(scan_image.T,
-                                   dsize=(1500, 1500),
-                                   center=(750, 750),
-                                   maxRadius=750,
-                                   flags=cv2.WARP_INVERSE_MAP
-                                   | cv2.WARP_FILL_OUTLIERS)
-        scan_image = cv2.rotate(scan_image, cv2.ROTATE_90_CLOCKWISE)
-        if fov == 90:
-            scan_image = scan_image[0:750, 200:1300]
-        elif fov == 120:
-            scan_image = scan_image[0:750, 75:1425]
-        scan_image = cv2.flip(scan_image, 1)
-        scan_image = cv2.applyColorMap(scan_image, cv2.COLORMAP_VIRIDIS)
-        scan_image = cv2.putText(scan_image, f'Range: {max_range} m', (1, 25),
-                                 cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255),
-                                 2, cv2.LINE_AA)
+        # Apply the updated warping logic
+        processed_image = self.warp_sonar(scan_image, self.contrast, fov)
 
-        # --- Publishing/Saving ---
+        # Post-processing: Colormap and Text
+        processed_image = cv2.applyColorMap(processed_image, cv2.COLORMAP_VIRIDIS)
+        cv2.putText(processed_image, f'Range: {max_range} m', (1, 25),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+
+        # Publishing/Saving
         if self.to_video:
-            # Write the processed frame to the video file
             if self.video_writer is None:
-                height, width = scan_image.shape[:2]
+                height, width = processed_image.shape[:2]
                 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
                 self.video_writer = cv2.VideoWriter(self.video_file, fourcc,
-                                                    self.video_fps,
-                                                    (width, height))
+                                                    self.video_fps, (width, height))
                 if not self.video_writer.isOpened():
                     self.get_logger().error("Failed to open video writer.")
                     return
-            self.video_writer.write(scan_image)
+            self.video_writer.write(processed_image)
         else:
-            # If not saving to video, publish the frame as a ROS 2 message
-            self.publisher.publish(self.br.cv2_to_imgmsg(scan_image))
+            self.publisher.publish(self.br.cv2_to_imgmsg(processed_image, encoding="bgr8"))
 
     def process_bag(self):
         """
@@ -189,40 +202,41 @@ class EchoImager(Node):
         # Check if the bag file exists.
         if not os.path.exists(self.bag_file):
             self.get_logger().error(f"Bag file not found: {self.bag_file}!")
-            exit()
+            return
         self.get_logger().info(f"Processing bag file: {self.bag_file}")
 
         # --- Setup Bag Reader ---
         storage_options = StorageOptions(uri=self.bag_file,
                                          storage_id='sqlite3')
         converter_options = ConverterOptions(input_serialization_format='cdr',
-                                             output_serialization_format='cdr')
+                                              output_serialization_format='cdr')
         reader = SequentialReader()
         reader.open(storage_options, converter_options)
 
-        # Get the message type for the specified data topic.
         topic_types = reader.get_all_topics_and_types()
         type_map = {t.name: t.type for t in topic_types}
         msg_type_str = type_map.get(self.data_topic, None)
+        
         if not msg_type_str:
-            self.get_logger().error(
-                f"Topic '{self.data_topic}' not found in bag!")
-            exit()
+            self.get_logger().error(f"Topic '{self.data_topic}' not found in bag!")
+            return
+        
         msg_type = get_message(msg_type_str)
 
-        # --- First Pass: Get Timestamps to Estimate FPS ---
+        # First Pass: Estimate FPS
         times = []
         while reader.has_next():
             (topic, data, t) = reader.read_next()
             if topic == self.data_topic:
-                msg = deserialize_message(data, msg_type)
                 times.append(t)
-        time_del = np.diff(times)
-        self.video_fps = np.round(1.0 / (np.median(time_del) * 1e-9)).astype(int)
-        self.get_logger().info(f'Estimated FPS: {self.video_fps}')
-        self.get_logger().info(f'Total Frames: {len(times)}')
+        
+        if len(times) > 1:
+            time_del = np.diff(times)
+            self.video_fps = int(np.round(1.0 / (np.median(time_del) * 1e-9)))
+        
+        self.get_logger().info(f'Estimated FPS: {self.video_fps} | Total Frames: {len(times)}')
 
-        # --- Second Pass: Process Messages ---
+        # Second Pass: Process
         reader = SequentialReader()
         reader.open(storage_options, converter_options)
         frame_num = 0
@@ -233,13 +247,11 @@ class EchoImager(Node):
                 self.data_callback(msg)
                 frame_num += 1
                 if frame_num % 50 == 0:
-                    self.get_logger().info(f'Processed Frames: {frame_num}/{len(times)}')
-        self.get_logger().info(f'Finished processing all frames!')
+                    self.get_logger().info(f'Processed: {frame_num}/{len(times)}')
 
-        # --- Cleanup ---
-        self.video_writer.release()
-        self.get_logger().info(f'Finished writing to video file: {self.video_file}')
-        exit()
+        if self.video_writer:
+            self.video_writer.release()
+        self.get_logger().info(f'Finished writing to {self.video_file}')
 
     def set_param_callback(self, params):
         """
@@ -248,25 +260,22 @@ class EchoImager(Node):
         """
         result = SetParametersResult(successful=True)
         for param in params:
-            # QoS setting are handled by QoSOverridingOptions
             if "qos" in param.name:
                 continue
-            exec(f"self.flag = self.{param.name} != param.value")
-            if self.flag:
-                exec(f"self.{param.name} = param.value")
+            if hasattr(self, param.name):
+                setattr(self, param.name, param.value)
                 self.get_logger().info(f'Updated {param.name}: {param.value}')
         return result
 
 
 def main(args=None):
-    """
-    The main function to run the node.
-    """
     rclpy.init(args=args)
     echo_imager = EchoImager()
-    # If not processing a bag, spin the node to keep it alive.
-    if echo_imager.bag_file == '':
-        rclpy.spin(echo_imager)
+    if not echo_imager.from_bag:
+        try:
+            rclpy.spin(echo_imager)
+        except KeyboardInterrupt:
+            pass
     echo_imager.destroy_node()
     rclpy.shutdown()
 
