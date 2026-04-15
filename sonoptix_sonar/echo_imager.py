@@ -61,17 +61,21 @@ class EchoImager(Node):
         # --- Parameters ---
         # Declare and get parameters for the node.
         params = {
-            'data_topic': '/sonar/echo/compressed',
-            'image_topic': '/sonar/echo/image',
-            'contrast': 10.0,
-            'bag_file': '',
-            'video_file': '',
+            'data_topic': ['/sonar/echo/compressed', str],
+            'image_topic': ['/sonar/echo/image', str],
+            'contrast': [10.0, float],
+            'bag_file': ['', str],
+            'video_file': ['', str],
         }
 
-        for param, value in params.items():
-            self.declare_parameter(param, value)
-            setattr(self, param, self.get_parameter(param).value)
-            self.get_logger().info(f'{param}: {value}')
+        for name, [value, dtype] in params.items():
+            self.declare_parameter(name, value)
+            setattr(self, name, self.get_parameter(name).value)
+
+        # Log current configuration
+        for name in params.keys():
+            val = getattr(self, name)
+            self.get_logger().info(f'{name}: {val}')
 
         self.br = CvBridge()
         self.video_fps = 15  # Default FPS for live stream recording

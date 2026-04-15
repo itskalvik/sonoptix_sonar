@@ -64,112 +64,133 @@ class EchoNode(Node):
             'frame_id': ['echo', str],
         }
 
-        for param, [value, dtype] in params.items():
-            self.declare_parameter(param, value)
-            exec(f"self.{param}:dtype = self.get_parameter(param).value")
-        params = self.get_parameters(params.keys())
-        for param in params:
-            self.get_logger().info(f'{param.name}: {param.value}')
+        for name, [value, dtype] in params.items():
+            self.declare_parameter(name, value)
+            setattr(self, name, self.get_parameter(name).value)
+
+        # Log current configuration
+        for name in params.keys():
+            val = getattr(self, name)
+            self.get_logger().info(f'{name}: {val}')
 
         qos_override_opts = QoSOverridingOptions(
             policy_kinds=(
                 qos.QoSPolicyKind.HISTORY,
                 qos.QoSPolicyKind.DEPTH,
                 qos.QoSPolicyKind.RELIABILITY,
-                )
+            )
         )
         SENSOR_QOS = rclpy.qos.qos_profile_sensor_data
 
         # Handle parameter updates
-        self.param_handler_ptr_ = self.add_on_set_parameters_callback(
-            self.set_param_callback)
+        self.param_handler_ptr_ = self.add_on_set_parameters_callback(self.set_param_callback)
 
         self.rtsp_url = f'rtsp://{self.ip}:8554/raw'
         self.api_url = f'http://{self.ip}:8000/api/v2'
 
-        self.get_logger().info(f'Configuring Sonar')
+        self.get_logger().info('Configuring Sonar...')
 
-        # Set the sonar range, tx_mode, and enable the transponder
-        state = 'on' if self.power_state else 'off'
-        requests.put(self.api_url + '/transceiver',
-                     json={
-                           "power_state": state,
-                           "range": self.range,
-                           "tx_mode": self.tx_mode
-                       })
+        # Initial sonar configuration
+        self._update_sonar_settings()
 
         # Set the data stream type to RTSP
-        requests.put(self.api_url + '/datastream', 
-                     json={"stream_type": 'rtsp'})
+        try:
+            requests.put(self.api_url + '/datastream', json={"stream_type": 'rtsp'}, timeout=2.0)
+        except requests.exceptions.RequestException as e:
+            self.get_logger().error(f"Failed to set stream type: {e}")
 
-        # Initialize CV bridge, video capture, and ros2 publisher
+        # Initialize CV bridge, video capture, and ROS 2 publisher
         self.br = CvBridge()
-        self.get_logger().info(f'Accessing RTSP stream')
         self.cap = cv2.VideoCapture(self.rtsp_url)
         self.publisher = self.create_publisher(Image, self.topic, SENSOR_QOS,
                                                qos_overriding_options=qos_override_opts) 
-        self.get_logger().info(f'Sonoptix Echo Initialized')
+        self.get_logger().info('Sonoptix Echo Initialized')
 
-        # Read and publish sonar data when available
+        # Main Loop
         try:
-            while True:
+            while rclpy.ok():
                 if not self.power_state:
                     rclpy.spin_once(self, timeout_sec=1.0)
                     continue
-                _, frame = self.cap.read()
+                
+                ret, frame = self.cap.read()
+                if not ret:
+                    continue
+
+                # Process frame
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                frame[0, 0] = self.range
-                frame = self.br.cv2_to_imgmsg(frame, encoding='mono8')
-                frame.header.stamp = self.get_clock().now().to_msg()
-                frame.header.frame_id = self.frame_id
+                # Embed range in top-left pixel for the imager node to read
+                frame[0, 0] = self.range 
+                
+                # Convert and publish
+                msg = self.br.cv2_to_imgmsg(frame, encoding='mono8')
+                msg.header.stamp = self.get_clock().now().to_msg()
+                msg.header.frame_id = self.frame_id
+                self.publisher.publish(msg)
 
-                self.publisher.publish(frame)
+                # Process callbacks (like parameter updates)
+                rclpy.spin_once(self, timeout_sec=0.001)
 
-                # Allow for params callback to be processed
-                rclpy.spin_once(self, timeout_sec=0.01)
         finally:
-            # Stop the transponder before destroying the node
-            requests.put(self.api_url + '/transceiver', json={"power_state": 'off',})
-            self.get_logger().info(f'Transceiver disabled')
-            self.destroy_node()
-            rclpy.shutdown()
+            self.shutdown_sonar()
+
+    def _update_sonar_settings(self):
+        """Helper to sync class attributes with the physical sonar via API."""
+        state = 'on' if self.power_state else 'off'
+        payload = {
+            "power_state": state,
+            "range": self.range,
+            "tx_mode": self.tx_mode
+        }
+        try:
+            requests.put(self.api_url + '/transceiver', json=payload, timeout=2.0)
+        except requests.exceptions.RequestException as e:
+            self.get_logger().error(f"Failed to update sonar settings: {e}")
+
+    def shutdown_sonar(self):
+        """Disables the transceiver on exit."""
+        try:
+            requests.put(self.api_url + '/transceiver', json={"power_state": 'off'}, timeout=2.0)
+            self.get_logger().info('Transceiver disabled')
+        except:
+            pass
+        self.destroy_node()
+        rclpy.shutdown()
 
     def set_param_callback(self, params):
         """
-        This function is the callback for when parameters are changed.
-        It updates the node's attributes and sends the new settings to the sonar.
+        Updates node attributes when ROS parameters change and syncs with sonar.
         """
         result = SetParametersResult(successful=True)
+        settings_changed = False
+
         for param in params:
-            # QoS setting are handled by QoSOverridingOptions
             if "qos" in param.name:
                 continue
-            exec(f"self.flag = self.{param.name} != param.value")
-            if self.flag:
-                exec(f"self.{param.name} = param.value")
-                self.get_logger().info(f'Updated {param.name}: {param.value}')
+            
+            # Check if attribute exists and if the value is actually different
+            if hasattr(self, param.name):
+                old_value = getattr(self, param.name)
+                if old_value != param.value:
+                    setattr(self, param.name, param.value)
+                    self.get_logger().info(f'Updated {param.name}: {param.value}')
+                    
+                    # If it's a sonar hardware setting, flag for API update
+                    if param.name in ['range', 'power_state', 'tx_mode']:
+                        settings_changed = True
 
-            # Configure sonar if necessary
-            if param.name in ['range', 'power_state']:
-                state = 'on' if self.power_state else 'off'
-                requests.put(self.api_url + '/transceiver',
-                             json={
-                                "power_state": state,
-                                "range": self.range,
-                                "tx_mode": self.tx_mode
-                             })
+        if settings_changed:
+            self._update_sonar_settings()
+
         return result
 
 
 def main(args=None):
-    """
-    The main function to run the node.
-    """
     rclpy.init(args=args)
-    echo = EchoNode()
-    rclpy.spin(echo)
-    echo.destroy_node()
-    rclpy.shutdown()
+    try:
+        echo = EchoNode()
+    except KeyboardInterrupt:
+        pass
 
 
 if __name__ == '__main__':
