@@ -77,9 +77,22 @@ class EchoImager(Node):
             val = getattr(self, name)
             self.get_logger().info(f'{name}: {val}')
 
+        # --- State Variables ---
         self.br = CvBridge()
-        self.video_fps = 15  # Default FPS for live stream recording
         
+        # Cache for cv2.remap
+        self.map_x = None
+        self.map_y = None
+        self.last_h = -1
+        self.last_w = -1
+        self.last_fov = -1
+
+        # Video recording state
+        self.video_writer = None
+        self.video_size = None  # (width, height)
+        self.video_fps = 15 
+        
+        # --- QoS Setup ---
         qos_override_opts = QoSOverridingOptions(
             policy_kinds=(
                 qos.QoSPolicyKind.HISTORY,
@@ -96,105 +109,126 @@ class EchoImager(Node):
         self.compressed = 'compressed' in self.data_topic
         data_type = CompressedImage if self.compressed else Image
 
-        # Determine input source
+        # --- Logic for Input/Output ---
         if len(self.bag_file) == 0:
             self.from_bag = False
             self.subscription = self.create_subscription(
                 data_type, self.data_topic, self.data_callback, 
                 SENSOR_QOS, qos_overriding_options=qos_override_opts)
-            self.get_logger().info("Reading data from ros2 node")
+            self.get_logger().info("Reading data from live ROS 2 topic")
         else:
             self.from_bag = True
             self.get_logger().info("Reading data from bag file")
 
-        # Determine output destination
         if len(self.video_file) == 0 and not self.from_bag:
             self.to_video = False
             self.publisher = self.create_publisher(
                 Image, self.image_topic, SENSOR_QOS, 
                 qos_overriding_options=qos_override_opts) 
-            self.get_logger().info("Publishing data to ros2 topic")
+            self.get_logger().info("Publishing processed images to ROS 2")
         else:
             if len(self.video_file) == 0:
                 self.video_file = 'echo_sonar.mp4'
-            self.video_writer = None
             self.to_video = True
-            self.get_logger().info(f"Saving data to video file: {self.video_file}")
+            self.get_logger().info(f"Saving processed video to: {self.video_file}")
 
         if self.from_bag:
             self.process_bag()
 
+    def _prepare_remap(self, h, w, fov):
+        """
+        Calculates the transformation maps for cv2.remap.
+        Maps the sonar polar scan to a Cartesian fan shape.
+        """
+        self.get_logger().info(f"Recalculating maps for H:{h} W:{w} FOV:{fov}")
+        fov_rad = np.deg2rad(fov)
+        
+        # Calculate destination dimensions (chord length at max radius)
+        dst_w = int(np.ceil(2 * h * np.sin(fov_rad / 2)))
+        dst_h = h
+        
+        # Create destination coordinate grid
+        x = np.arange(dst_w, dtype=np.float32)
+        y = np.arange(dst_h, dtype=np.float32)
+        x_grid, y_grid = np.meshgrid(x, y)
+
+        # Center sonar head at bottom-middle
+        dx = x_grid - (dst_w / 2.0)
+        dy = h - y_grid 
+
+        radius = np.sqrt(dx**2 + dy**2)
+        theta = np.arctan2(dx, dy)
+
+        # Map to source image: X is beam angle, Y is range (radius)
+        self.map_x = (theta / fov_rad) * w + (w / 2.0)
+        self.map_y = radius
+        
+        self.last_h, self.last_w, self.last_fov = h, w, fov
+
+        # --- Proportional Text Scaling Logic ---
+        # Scales text based on image height (e.g., 0.8 scale for ~400px height)
+        self.font_scale = h / 600.0  
+        self.thickness = max(1, int(self.font_scale * 2))
+
+        # Anchor position to fixed margin scaled by font size.
+        margin_x = int(20 * self.font_scale)
+        margin_y = int(40 * self.font_scale)
+        self.text_org = (margin_x, h-margin_y)
+
     def warp_sonar(self, scan_image, contrast, fov):
         """
-        The new version of sonar warping logic.
+        Efficiently warps the image using a single-pass remap.
         """
-        # Contrast adjustment
         scan_image = cv2.convertScaleAbs(scan_image, alpha=contrast, beta=0)
         h, w = scan_image.shape
-        
-        # Calculate padding to represent a full 360 degrees
-        px_per_deg = w / fov
-        total_360_px = int(px_per_deg * 360)
-        padding = (total_360_px - w) // 2
-        scan_image = cv2.copyMakeBorder(scan_image, 0, 0, padding, padding, 
-                                        cv2.BORDER_CONSTANT, value=0)
 
-        # Transpose for warpPolar
-        scan_image = scan_image.T 
-        
-        # Polar Warp
-        scan_image = cv2.warpPolar(scan_image,
-                                   dsize=(h*2, h*2),
-                                   center=(h, h),
-                                   maxRadius=h,
-                                   flags=cv2.WARP_INVERSE_MAP | cv2.WARP_FILL_OUTLIERS)
-        
-        # Rotate so the sonar head is at the top center
-        scan_image = cv2.rotate(scan_image, cv2.ROTATE_90_CLOCKWISE)
+        if (h != self.last_h or w != self.last_w or fov != self.last_fov):
+            self._prepare_remap(h, w, fov)
 
-        # Calculate final crop to remove empty pixels
-        d = int(np.ceil(2 * h * np.sin(np.deg2rad(fov / 2))))
-        s = (h * 2 - d) // 2
-        scan_image = scan_image[0:h, s:s+d]
-        
-        # Flip to match standard sonar display
-        scan_image = cv2.flip(scan_image, 1)
-        
-        return scan_image
+        return cv2.remap(
+            scan_image, self.map_x, self.map_y, 
+            interpolation=cv2.INTER_LINEAR, 
+            borderMode=cv2.BORDER_CONSTANT, 
+            borderValue=0
+        )
 
     def data_callback(self, msg):
         """
-        Callback function to process incoming sonar image data.
-        This function is called for each message received on the data_topic.
-        """ 
-        # Convert the ROS 2 Image message to an OpenCV image (numpy array).
+        Processes incoming frames and handles video resizing.
+        """
         if self.compressed:
             scan_image = self.br.compressed_imgmsg_to_cv2(msg)
         else:
             scan_image = self.br.imgmsg_to_cv2(msg)
 
-        # Logic for range and fov
+        # Metadata extraction
         max_range = scan_image[0, 0]
         fov = 120 if max_range <= 30 else 90
 
-        # Apply the updated warping logic
+        # Warp and Colormap
         processed_image = self.warp_sonar(scan_image, self.contrast, fov)
-
-        # Post-processing: Colormap and Text
         processed_image = cv2.applyColorMap(processed_image, cv2.COLORMAP_VIRIDIS)
-        cv2.putText(processed_image, f'Range: {max_range} m', (1, 25),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
 
-        # Publishing/Saving
-        if self.to_video:
+        # Annotate
+        cv2.putText(processed_image, f'Max Range: {max_range} m', self.text_org,
+                    cv2.FONT_HERSHEY_SIMPLEX, self.font_scale, (255, 255, 255), 
+                    self.thickness, cv2.LINE_AA)
+
+        if self.to_video:            
+            # Initialize VideoWriter based on the VERY FIRST frame's dimensions
+            h, w = processed_image.shape[:2]
             if self.video_writer is None:
-                height, width = processed_image.shape[:2]
+                self.video_size = (w, h)
                 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
                 self.video_writer = cv2.VideoWriter(self.video_file, fourcc,
-                                                    self.video_fps, (width, height))
-                if not self.video_writer.isOpened():
-                    self.get_logger().error("Failed to open video writer.")
-                    return
+                                                    self.video_fps, self.video_size)
+                self.get_logger().info(f"Video fixed at resolution: {self.video_size}")
+
+            # If sonar range changes, resize the frame to match the existing video container
+            if (w, h) != self.video_size:
+                processed_image = cv2.resize(processed_image, self.video_size, 
+                                             interpolation=cv2.INTER_AREA)
+
             self.video_writer.write(processed_image)
         else:
             self.publisher.publish(self.br.cv2_to_imgmsg(processed_image, encoding="bgr8"))
@@ -205,13 +239,11 @@ class EchoImager(Node):
         """
         # Check if the bag file exists.
         if not os.path.exists(self.bag_file):
-            self.get_logger().error(f"Bag file not found: {self.bag_file}!")
+            self.get_logger().error(f"Bag file not found: {self.bag_file}")
             return
         self.get_logger().info(f"Processing bag file: {self.bag_file}")
 
-        # --- Setup Bag Reader ---
-        storage_options = StorageOptions(uri=self.bag_file,
-                                         storage_id='sqlite3')
+        storage_options = StorageOptions(uri=self.bag_file, storage_id='sqlite3')
         converter_options = ConverterOptions(input_serialization_format='cdr',
                                               output_serialization_format='cdr')
         reader = SequentialReader()
@@ -222,12 +254,12 @@ class EchoImager(Node):
         msg_type_str = type_map.get(self.data_topic, None)
         
         if not msg_type_str:
-            self.get_logger().error(f"Topic '{self.data_topic}' not found in bag!")
+            self.get_logger().error(f"Topic {self.data_topic} not in bag")
             return
         
         msg_type = get_message(msg_type_str)
 
-        # First Pass: Estimate FPS
+        # Estimate FPS
         times = []
         while reader.has_next():
             (topic, data, t) = reader.read_next()
@@ -235,12 +267,10 @@ class EchoImager(Node):
                 times.append(t)
         
         if len(times) > 1:
-            time_del = np.diff(times)
-            self.video_fps = int(np.round(1.0 / (np.median(time_del) * 1e-9)))
-        
-        self.get_logger().info(f'Estimated FPS: {self.video_fps} | Total Frames: {len(times)}')
+            self.video_fps = int(np.round(1.0 / (np.median(np.diff(times)) * 1e-9)))
+            self.get_logger().info(f"Estimated Video FPS: {self.video_fps}")
 
-        # Second Pass: Process
+        # Reset reader for processing
         reader = SequentialReader()
         reader.open(storage_options, converter_options)
         frame_num = 0
@@ -279,7 +309,9 @@ def main(args=None):
         try:
             rclpy.spin(echo_imager)
         except KeyboardInterrupt:
-            pass
+            if echo_imager.video_writer:
+                echo_imager.video_writer.release()
+                echo_imager.get_logger().info(f'Finished writing to {echo_imager.video_file}')
     echo_imager.destroy_node()
     rclpy.shutdown()
 
