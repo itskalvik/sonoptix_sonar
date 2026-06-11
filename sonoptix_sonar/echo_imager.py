@@ -201,8 +201,14 @@ class EchoImager(Node):
         else:
             scan_image = self.br.imgmsg_to_cv2(msg)
 
-        # Metadata extraction
-        max_range = scan_image[0, 0]
+        # Extract the 8-bit encoded max range from the bottom-left pixels
+        bits = (scan_image[-1, :8] > 127).astype(np.uint8)
+        max_range = int(np.packbits(bits)[0])
+        
+        # Black out the data pixels so they aren't processed by cv2.remap
+        scan_image[-1, :8] = 0
+        # --------------------------
+
         fov = 120 if max_range <= 30 else 90
 
         # Warp and Colormap

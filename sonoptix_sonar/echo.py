@@ -30,6 +30,7 @@ It captures data from the sonar, processes it, and publishes it as a ROS 2 Image
 The node also provides a service to control the sonar's power state, range, and other parameters.
 """
 
+import time
 import rclpy
 from rclpy import qos
 from rclpy.node import Node
@@ -37,6 +38,7 @@ from rcl_interfaces.msg import SetParametersResult
 from rclpy.qos_overriding_options import QoSOverridingOptions
 
 import cv2
+import numpy as np
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image
 
@@ -99,12 +101,18 @@ class EchoNode(Node):
         except requests.exceptions.RequestException as e:
             self.get_logger().error(f"Failed to set stream type: {e}")
 
+        # Give the hardware a moment to spin up the RTSP server
+        time.sleep(2.0)
+
         # Initialize CV bridge, video capture, and ROS 2 publisher
         self.br = CvBridge()
         self.cap = cv2.VideoCapture(self.rtsp_url)
         self.publisher = self.create_publisher(Image, self.topic, SENSOR_QOS,
                                                qos_overriding_options=qos_override_opts) 
         self.get_logger().info('Sonoptix Echo Initialized')
+
+        # Pre-compute the bit shifts array for 8-bit performance
+        self.bit_shifts = np.arange(7, -1, -1, dtype=np.uint8)
 
         # Main Loop
         try:
@@ -114,13 +122,19 @@ class EchoNode(Node):
                     continue
                 
                 ret, frame = self.cap.read()
-                if not ret:
+                
+                # Protect against dropped frames or stream lag
+                if not ret or frame is None:
+                    self.get_logger().warn('Dropped frame, waiting for stream...')
+                    rclpy.spin_once(self, timeout_sec=0.1)
                     continue
 
                 # Process frame
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                # Embed range in top-left pixel for the imager node to read
-                frame[0, 0] = self.range 
+                
+                # Use NumPy bitwise operations to encode the max range 
+                # as an 8-bit array (scaled to 0-255) in one step
+                frame[-1, :8] = ((np.uint8(self.range) >> self.bit_shifts) & 1) * 255
                 
                 # Convert and publish
                 msg = self.br.cv2_to_imgmsg(frame, encoding='mono8')
