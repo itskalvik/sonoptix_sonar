@@ -33,30 +33,18 @@ def generate_launch_description():
     compression_level = 1
     sonar_range = 12  # meters
     data_topic = '/sonar/echo/data'
-    compressed_topic = '/sonar/echo/compressed'
-    # QoS Config
-    reliability = 'best_effort'
+    reliability = 'best_effort' # QoS Config
+    disable_compressed = False
 
     echo_data = Node(package='sonoptix_sonar',
                      executable='echo',
                      parameters=[{
                          'topic': data_topic,
                          'range': sonar_range,
+                         'disable_compressed': disable_compressed,
+                         'png_compression_level': compression_level,
                          f'qos_overrides.{data_topic}.publisher.reliability': reliability
                      }],
                      output='screen')
 
-    echo_transport = Node(package='image_transport',
-                          executable='republish',
-                          name='echo_transport',
-                          arguments=['raw', 'compressed'], # input data, output data
-                          remappings=[('in', data_topic),
-                                      ('out/compressed', compressed_topic)],
-                          parameters=[{
-                              'out.compressed.format': 'png',
-                              'out.compressed.png_level': compression_level,
-                              f'qos_overrides.{compressed_topic}.publisher.reliability': reliability
-                          }],
-                          output='screen')
-
-    return LaunchDescription([echo_data, echo_transport])
+    return LaunchDescription([echo_data])

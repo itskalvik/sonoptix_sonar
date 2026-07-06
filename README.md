@@ -25,7 +25,7 @@ This ROS 2 package provides a robust driver and processing node for the [**Sonop
 ## Overview
 This package contains two main nodes designed to work together safely over lossy networks:
 
-* **`echo`**: A driver node that interfaces directly with the Sonoptix sonar hardware REST API and RTSP stream. It captures raw 8-bit grayscale sonar data, embeds telemetry, and publishes it as a ROS 2 `sensor_msgs/Image`.
+* **`echo`**: A driver node that interfaces directly with the Sonoptix sonar hardware REST API and RTSP stream. It captures raw 8-bit grayscale sonar data, embeds telemetry, and publishes it as a ROS 2 `sensor_msgs/Image` and `sensor_msgs/CompressedImage`.
 * **`echo_imager`**: A processing node that subscribes to the raw or compressed sonar data, extracts the embedded telemetry, converts the data into a polar (fan-shaped) visualization, and can publish the result or save it directly to an `.mp4` video file (ideal for processing `rosbag` files).
 
 ---
@@ -62,7 +62,7 @@ Launches the `echo` node to publish sonar data and compresses the data stream fo
 **Published Topics**:
 
 * Raw sonar data: `/sonar/echo/data` (`sensor_msgs/Image`)
-* Compressed sonar data: `/sonar/echo/compressed` (`sensor_msgs/CompressedImage`)
+* Compressed sonar data: `/sonar/echo/data/compressed` (`sensor_msgs/CompressedImage`)
 
 **Run Example**:
 
@@ -82,7 +82,7 @@ ros2 param set /echo range 50
 
 Decompresses the previously compressed sonar echo data for downstream processing or visualization. This is typically used when playing back compressed sonar data from a bag file.
 
-**Subscribed Topics**: `/sonar/echo/compressed`
+**Subscribed Topics**: `/sonar/echo/data/compressed`
 
 **Published Topics**:  `/sonar/echo/data` (`sensor_msgs/Image`)
 
@@ -101,7 +101,10 @@ ros2 launch sonoptix_sonar echo_decompress.launch.py
 
 **Description**: Configures the Sonoptix Echo via its REST API, manages a safe RTSP connection with dropped-frame protection, encodes the max range into the image payload, and publishes the profile.
 
-**Published Topics**: `/sonar/echo/data` (`sensor_msgs/Image`)
+**Published Topics**:
+
+* `/sonar/echo/data` (`sensor_msgs/Image`)
+* `/sonar/echo/data/compressed` (`sensor_msgs/CompressedImage`)
 
 **Parameters**: *(Can be updated dynamically while the node is running)*
 
@@ -113,6 +116,8 @@ ros2 launch sonoptix_sonar echo_decompress.launch.py
 | `power_state` | bool | `True` | The power state of the transceiver |
 | `topic` | str | `/sonar/echo/data` | Topic to publish sonar frames |
 | `frame_id` | str | `echo` | TF frame ID |
+| `disable_compressed` | bool | `False` | Disables publishing the `/compressed` topic |
+| `png_compression_level` | int | `1` | OpenCV PNG compression level (0-9).
 
 **Run Example**:
 
@@ -127,7 +132,7 @@ ros2 run sonoptix_sonar echo
 
 **Description**: Extracts the 8-bit encoded max range from the raw stream, dynamically calculates the required field of view (FOV) and mapping coordinates, and converts the raw data into a `cv2.COLORMAP_VIRIDIS` polar image.
 
-**Subscribed Topics**: `/sonar/echo/compressed` (or raw depending on `data_topic`)
+**Subscribed Topics**: `/sonar/echo/data/compressed` (or raw depending on `data_topic`)
 
 **Published Topics**: `/sonar/echo/image` (`sensor_msgs/Image`)
 
@@ -135,7 +140,7 @@ ros2 run sonoptix_sonar echo
 
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
-| `data_topic` | str | `/sonar/echo/compressed` | Input topic for sonar data |
+| `data_topic` | str | `/sonar/echo/data/compressed` | Input topic for sonar data |
 | `image_topic` | str | `/sonar/echo/image` | Output topic for visualized image |
 | `contrast` | float | `10.0` | Contrast multiplier for visualization |
 | `bag_file` | str | `""` | Optional path to an input ros2 bag file |
@@ -155,4 +160,3 @@ ros2 run sonoptix_sonar echo_imager --ros-args -p contrast:=10.0 -p data_topic:=
 ## License
 
 This package is licensed under the MIT License. See the top of each file or [LICENSE](https://www.google.com/search?q=LICENSE) for details.
-EOF

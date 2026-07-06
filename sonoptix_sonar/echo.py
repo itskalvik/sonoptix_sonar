@@ -26,7 +26,8 @@
 
 """
 This script is a ROS 2 node that interfaces with a Sonoptix sonar.
-It captures data from the sonar, processes it, and publishes it as a ROS 2 Image message.
+It captures data from the sonar, processes it, and publishes it as a ROS 2 Image 
+and CompressedImage message.
 The node also provides a service to control the sonar's power state, range, and other parameters.
 """
 
@@ -40,7 +41,7 @@ from rclpy.qos_overriding_options import QoSOverridingOptions
 import cv2
 import numpy as np
 from cv_bridge import CvBridge
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import Image, CompressedImage
 
 import requests
 
@@ -64,6 +65,8 @@ class EchoNode(Node):
             'power_state': [True, bool],
             'topic': ['/sonar/echo/data', str],
             'frame_id': ['echo', str],
+            'disable_compressed': [True, bool],
+            'png_compression_level': [1, int],
         }
 
         for name, [value, dtype] in params.items():
@@ -84,7 +87,7 @@ class EchoNode(Node):
         )
         SENSOR_QOS = rclpy.qos.qos_profile_sensor_data
 
-        # Handle parameter updates
+        # Handle parameter updates dynamically
         self.param_handler_ptr_ = self.add_on_set_parameters_callback(self.set_param_callback)
 
         self.rtsp_url = f'rtsp://{self.ip}:8554/raw'
@@ -104,11 +107,21 @@ class EchoNode(Node):
         # Give the hardware a moment to spin up the RTSP server
         time.sleep(2.0)
 
-        # Initialize CV bridge, video capture, and ROS 2 publisher
+        # Initialize CV bridge and video capture
         self.br = CvBridge()
         self.cap = cv2.VideoCapture(self.rtsp_url)
-        self.publisher = self.create_publisher(Image, self.topic, SENSOR_QOS,
-                                               qos_overriding_options=qos_override_opts) 
+        
+        # --- Direct ROS 2 Publishers ---
+        self.raw_publisher = self.create_publisher(Image, self.topic, SENSOR_QOS,
+                                                   qos_overriding_options=qos_override_opts) 
+        
+        if not self.disable_compressed:
+            self.compressed_publisher = self.create_publisher(CompressedImage, f"{self.topic}/compressed", 
+                                                              SENSOR_QOS, qos_overriding_options=qos_override_opts)
+        else:
+            self.compressed_publisher = None
+            self.get_logger().info('Compressed image topic is disabled.')
+
         self.get_logger().info('Sonoptix Echo Initialized')
 
         # Pre-compute the bit shifts array for 8-bit performance
@@ -136,11 +149,28 @@ class EchoNode(Node):
                 # as an 8-bit array (scaled to 0-255) in one step
                 frame[-1, :8] = ((np.uint8(self.range) >> self.bit_shifts) & 1) * 255
                 
-                # Convert and publish
-                msg = self.br.cv2_to_imgmsg(frame, encoding='mono8')
-                msg.header.stamp = self.get_clock().now().to_msg()
-                msg.header.frame_id = self.frame_id
-                self.publisher.publish(msg)
+                # Prepare common header info
+                stamp = self.get_clock().now().to_msg()
+                
+                # 1. Convert and publish Raw
+                raw_msg = self.br.cv2_to_imgmsg(frame, encoding='mono8')
+                raw_msg.header.stamp = stamp
+                raw_msg.header.frame_id = self.frame_id
+                self.raw_publisher.publish(raw_msg)
+
+                # 2. Convert and publish Compressed
+                if self.compressed_publisher is not None and not self.disable_compressed:
+                    # Compress to PNG (lossless)
+                    encode_param = [int(cv2.IMWRITE_PNG_COMPRESSION), self.png_compression_level]
+                    ret, buffer = cv2.imencode('.png', frame, encode_param)
+                    
+                    if ret:
+                        comp_msg = CompressedImage()
+                        comp_msg.header.stamp = stamp
+                        comp_msg.header.frame_id = self.frame_id
+                        comp_msg.format = "png"
+                        comp_msg.data = np.array(buffer).tobytes()
+                        self.compressed_publisher.publish(comp_msg)
 
                 # Process callbacks (like parameter updates)
                 rclpy.spin_once(self, timeout_sec=0.001)
@@ -196,6 +226,8 @@ class EchoNode(Node):
         if settings_changed:
             self._update_sonar_settings()
 
+        # Give the hardware a moment to update settings
+        time.sleep(3.0)
         return result
 
 
