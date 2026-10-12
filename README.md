@@ -134,7 +134,10 @@ ros2 run sonoptix_sonar echo
 
 **Subscribed Topics**: `/sonar/echo/data/compressed` (or raw depending on `data_topic`)
 
-**Published Topics**: `/sonar/echo/image` (`sensor_msgs/Image`)
+**Published Topics**:
+
+* `/sonar/echo/image` (`sensor_msgs/Image`)
+* `/sonar/echo/image/compressed` (`sensor_msgs/CompressedImage`, JPEG)
 
 **Parameters**: *(Can be updated dynamically while the node is running)*
 
@@ -145,6 +148,8 @@ ros2 run sonoptix_sonar echo
 | `contrast` | float | `10.0` | Contrast multiplier for visualization |
 | `bag_file` | str | `""` | Optional path to an input ros2 bag file |
 | `video_file` | str | `""` | Optional path to an output mp4 video file |
+| `disable_compressed` | bool | `False` | Disables publishing the `<image_topic>/compressed` topic |
+| `jpeg_quality` | int | `90` | OpenCV JPEG quality (0-100) for the compressed topic |
 
 **Run Example**:
 

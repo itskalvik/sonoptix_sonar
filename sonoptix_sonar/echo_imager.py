@@ -27,7 +27,8 @@
 """
 This script is a ROS 2 node that processes raw sonar data from an 'echo.py' node.
 It subscribes to the sonar's image topic, converts the raw data into a polar image,
-and can save the output as a video file or publish it as a new image topic.
+and can save the output as a video file or publish it as a new Image and
+CompressedImage topic.
 The node can also process data from a ROS 2 bag file.
 """
 
@@ -66,6 +67,8 @@ class EchoImager(Node):
             'contrast': [10.0, float],
             'bag_file': ['', str],
             'video_file': ['', str],
+            'disable_compressed': [False, bool],
+            'jpeg_quality': [90, int],
         }
 
         for name, [value, dtype] in params.items():
@@ -126,6 +129,14 @@ class EchoImager(Node):
                 Image, self.image_topic, SENSOR_QOS, 
                 qos_overriding_options=qos_override_opts) 
             self.get_logger().info("Publishing processed images to ROS 2")
+
+            if not self.disable_compressed:
+                self.compressed_publisher = self.create_publisher(
+                    CompressedImage, f"{self.image_topic}/compressed", SENSOR_QOS,
+                    qos_overriding_options=qos_override_opts)
+            else:
+                self.compressed_publisher = None
+                self.get_logger().info('Compressed image topic is disabled.')
         else:
             if len(self.video_file) == 0:
                 self.video_file = 'echo_sonar.mp4'
@@ -237,7 +248,23 @@ class EchoImager(Node):
 
             self.video_writer.write(processed_image)
         else:
-            self.publisher.publish(self.br.cv2_to_imgmsg(processed_image, encoding="bgr8"))
+            # 1. Convert and publish Raw
+            img_msg = self.br.cv2_to_imgmsg(processed_image, encoding="bgr8")
+            img_msg.header = msg.header
+            self.publisher.publish(img_msg)
+
+            # 2. Convert and publish Compressed
+            if self.compressed_publisher is not None and not self.disable_compressed:
+                # Compress to JPEG (lossy, colormapped visualization only)
+                encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), self.jpeg_quality]
+                ret, buffer = cv2.imencode('.jpg', processed_image, encode_param)
+
+                if ret:
+                    comp_msg = CompressedImage()
+                    comp_msg.header = msg.header
+                    comp_msg.format = "jpeg"
+                    comp_msg.data = buffer.tobytes()
+                    self.compressed_publisher.publish(comp_msg)
 
     def process_bag(self):
         """
